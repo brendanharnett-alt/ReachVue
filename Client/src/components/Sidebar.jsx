@@ -14,16 +14,14 @@ export default function Sidebar() {
   const location = useLocation(); // lets us highlight the active link
 
   return (
-    <div className="group fixed left-0 top-0 h-screen z-40">
-      {/* Main sidebar content */}
+    <div className="group relative h-screen">
       <div
         className="h-full bg-gray-900 text-white flex flex-col items-center p-4
                    shadow-lg shadow-gray-700/40 border-r border-gray-800
-                   w-20 group-hover:w-60 transition-all duration-300 ease-in-out overflow-hidden
-                   z-40"
+                   w-20 group-hover:w-60 transition-all duration-300 ease-in-out overflow-hidden"
       >
         {/* Logo */}
-        <div className="mb-8 w-full px-2 hidden group-hover:block opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <div className="mb-8 w-full px-2 hidden group-hover:block">
           <img src={logo} alt="ReachVue" className="h-12 mx-auto" />
         </div>
 
@@ -40,7 +38,7 @@ export default function Sidebar() {
                 }`}
               >
                 {item.icon}
-                <span className="hidden group-hover:inline opacity-0 group-hover:opacity-100 transition-opacity duration-300">{item.label}</span>
+                <span className="hidden group-hover:inline">{item.label}</span>
               </Link>
             );
           })}
