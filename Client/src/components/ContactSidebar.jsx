@@ -1,3 +1,6 @@
+// Version tracking test commit - Dec 13 2025
+console.log("Version test")
+
 import React from "react"
 import { Button } from "@/components/ui/button"
 import {
