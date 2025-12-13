@@ -27,7 +27,7 @@ export default function ContactSidebar({ contact, onClose }) {
         </Button>
       </div>
 
-      {/* Contact Info  */}
+      {/* Contact Info Header */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sm">
           <BuildingIcon className="h-4 w-4 text-gray-500" />
