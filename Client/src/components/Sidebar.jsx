@@ -14,7 +14,7 @@ export default function Sidebar() {
   const location = useLocation(); // lets us highlight the active link
 
   return (
-    <div className="group relative h-screen">
+    <div className="group fixed left-0 top-0 h-screen z-40">
       <div
         className="h-full bg-gray-900 text-white flex flex-col items-center p-4
                    shadow-lg shadow-gray-700/40 border-r border-gray-800

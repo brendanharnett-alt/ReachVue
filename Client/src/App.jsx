@@ -8,9 +8,9 @@ import TemplatesPage from "./pages/TemplatesPage";
 export default function App() {
   return (
     <Router>
-      <div className="flex h-screen">
+      <div className="relative h-screen">
         <Sidebar />
-        <div className="flex-1 overflow-y-auto bg-gray-50">
+        <div className="ml-20 bg-gray-50 h-full overflow-y-auto transition-all duration-300 ease-in-out">
           <Routes>
             {/* Default route = your existing ContactsTable */}
             <Route path="/" element={<ContactsPage />} />
