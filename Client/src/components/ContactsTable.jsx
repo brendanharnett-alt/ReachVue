@@ -44,6 +44,7 @@ import {
   Download,
 } from "lucide-react"
 import ContactSidebar from "./ContactSidebar"
+import AddContactMenu from "./AddContactMenu"
 
 // 🔹 Dropdown for per-row actions (Email removed - now an icon button)
 export function ActionDropdown({ onCall, onLinkedIn, onLogTouch }) {
@@ -738,7 +739,7 @@ export default function ContactsTable() {
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button className="bg-primary text-white">+ Add Contact</Button>
+          <AddContactMenu />
         </div>
       </div>
 
