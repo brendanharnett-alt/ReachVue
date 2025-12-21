@@ -24,6 +24,7 @@ export default function AddGroupDialog({ open, onClose }) {
   const [selectedFile, setSelectedFile] = useState(null)
   const [csvHeaders, setCsvHeaders] = useState([])
   const [csvRows, setCsvRows] = useState([])
+  const [isDragging, setIsDragging] = useState(false)
   const [columnMapping, setColumnMapping] = useState({
     firstName: "",
     lastName: "",
@@ -93,47 +94,81 @@ export default function AddGroupDialog({ open, onClose }) {
     return csvRows.slice(0, 5)
   }, [csvRows])
 
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setSelectedFile(file)
-      // Reset column mapping when new file is selected
-      setColumnMapping({
-        firstName: "",
-        lastName: "",
-        email: "",
-        company: "",
-        title: "",
-        linkedIn: "",
-      })
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        try {
-          const text = event.target?.result
-          if (!text) {
-            throw new Error("No file content")
-          }
-          const { headers, rows } = parseCSV(String(text))
-          if (!headers || !Array.isArray(headers) || !rows || !Array.isArray(rows)) {
-            throw new Error("Invalid CSV structure")
-          }
-          setCsvHeaders(headers)
-          setCsvRows(rows)
-          console.log("CSV parsed:", { headers, rowCount: rows.length })
-        } catch (error) {
-          console.error("Error parsing CSV:", error)
-          alert("Error parsing CSV file. Please ensure it's a valid CSV format.")
-          setCsvHeaders([])
-          setCsvRows([])
-          setSelectedFile(null)
+  const processFile = (file) => {
+    if (!file) return
+    
+    // Check if it's a CSV file
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      alert("Please upload a CSV file.")
+      return
+    }
+
+    setSelectedFile(file)
+    // Reset column mapping when new file is selected
+    setColumnMapping({
+      firstName: "",
+      lastName: "",
+      email: "",
+      company: "",
+      title: "",
+      linkedIn: "",
+    })
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result
+        if (!text) {
+          throw new Error("No file content")
         }
-      }
-      reader.onerror = () => {
-        alert("Error reading file.")
+        const { headers, rows } = parseCSV(String(text))
+        if (!headers || !Array.isArray(headers) || !rows || !Array.isArray(rows)) {
+          throw new Error("Invalid CSV structure")
+        }
+        setCsvHeaders(headers)
+        setCsvRows(rows)
+        console.log("CSV parsed:", { headers, rowCount: rows.length })
+      } catch (error) {
+        console.error("Error parsing CSV:", error)
+        alert("Error parsing CSV file. Please ensure it's a valid CSV format.")
         setCsvHeaders([])
         setCsvRows([])
+        setSelectedFile(null)
       }
-      reader.readAsText(file)
+    }
+    reader.onerror = () => {
+      alert("Error reading file.")
+      setCsvHeaders([])
+      setCsvRows([])
+    }
+    reader.readAsText(file)
+  }
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0]
+    processFile(file)
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      const file = files[0]
+      processFile(file)
     }
   }
 
@@ -222,7 +257,16 @@ export default function AddGroupDialog({ open, onClose }) {
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
                   Upload CSV File
                 </label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 transition-colors">
+                <div
+                  className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                    isDragging
+                      ? "border-blue-400 bg-blue-50"
+                      : "border-gray-300 hover:border-gray-400"
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
                   <input
                     type="file"
                     accept=".csv"
@@ -257,9 +301,9 @@ export default function AddGroupDialog({ open, onClose }) {
 
           {/* Step 2: Preview & Mapping */}
           {step === 2 && (
-            <div className="grid grid-cols-12 gap-4">
+            <div className="grid grid-cols-12 gap-4 items-start">
               {/* Left: Preview Table */}
-              <div className="col-span-7 border rounded-lg overflow-hidden bg-white">
+              <div className="col-span-7 border rounded-lg overflow-hidden bg-white h-fit">
                 <div className="px-3 py-2 border-b bg-gray-50">
                   <p className="text-sm font-medium">Preview</p>
                 </div>
