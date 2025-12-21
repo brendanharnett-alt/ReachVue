@@ -87,28 +87,11 @@ export default function AddGroupDialog({ open, onClose }) {
     }
   }
 
-  // Get preview rows based on column mapping
+  // Get preview rows (first 5 data rows)
   const previewRows = useMemo(() => {
     if (!csvRows || csvRows.length === 0) return []
-
-    try {
-      return csvRows.slice(0, 5).map((row) => {
-        if (!row || typeof row !== "object") return { firstName: "", lastName: "", email: "", company: "", title: "", linkedIn: "" }
-        
-        return {
-          firstName: (columnMapping.firstName && row[columnMapping.firstName]) ? String(row[columnMapping.firstName]) : "",
-          lastName: (columnMapping.lastName && row[columnMapping.lastName]) ? String(row[columnMapping.lastName]) : "",
-          email: (columnMapping.email && row[columnMapping.email]) ? String(row[columnMapping.email]) : "",
-          company: (columnMapping.company && row[columnMapping.company]) ? String(row[columnMapping.company]) : "",
-          title: (columnMapping.title && row[columnMapping.title]) ? String(row[columnMapping.title]) : "",
-          linkedIn: (columnMapping.linkedIn && row[columnMapping.linkedIn]) ? String(row[columnMapping.linkedIn]) : "",
-        }
-      })
-    } catch (error) {
-      console.error("Error generating preview rows:", error)
-      return []
-    }
-  }, [csvRows, columnMapping])
+    return csvRows.slice(0, 5)
+  }, [csvRows])
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0]
@@ -274,52 +257,54 @@ export default function AddGroupDialog({ open, onClose }) {
 
           {/* Step 2: Preview & Mapping */}
           {step === 2 && (
-            <div className="grid grid-cols-12 gap-4 min-h-[380px]">
+            <div className="grid grid-cols-12 gap-4">
               {/* Left: Preview Table */}
               <div className="col-span-7 border rounded-lg overflow-hidden bg-white">
-                <div className="h-[360px] overflow-y-auto">
-                  <div className="px-3 py-2 border-b bg-gray-50 sticky top-0">
-                    <p className="text-sm font-medium">Preview</p>
-                  </div>
+                <div className="px-3 py-2 border-b bg-gray-50">
+                  <p className="text-sm font-medium">Preview</p>
+                </div>
+                <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50 sticky top-[41px]">
+                    <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 border-b">
-                          First Name
-                        </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 border-b">
-                          Last Name
-                        </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 border-b">
-                          Email
-                        </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 border-b">
-                          Company
-                        </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 border-b">
-                          Title
-                        </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 border-b">
-                          LinkedIn
-                        </th>
+                        {csvHeaders && csvHeaders.length > 0 ? (
+                          csvHeaders.map((header, idx) => (
+                            <th
+                              key={idx}
+                              className="px-3 py-2 text-left text-xs font-medium text-gray-700 border-b whitespace-nowrap"
+                            >
+                              {header}
+                            </th>
+                          ))
+                        ) : (
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 border-b">
+                            No headers
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
                       {previewRows && previewRows.length > 0 ? (
                         previewRows.map((row, idx) => (
                           <tr key={idx} className="border-b hover:bg-gray-50">
-                            <td className="px-3 py-2 text-xs">{row?.firstName || "-"}</td>
-                            <td className="px-3 py-2 text-xs">{row?.lastName || "-"}</td>
-                            <td className="px-3 py-2 text-xs">{row?.email || "-"}</td>
-                            <td className="px-3 py-2 text-xs">{row?.company || "-"}</td>
-                            <td className="px-3 py-2 text-xs">{row?.title || "-"}</td>
-                            <td className="px-3 py-2 text-xs">{row?.linkedIn || "-"}</td>
+                            {csvHeaders && csvHeaders.length > 0 ? (
+                              csvHeaders.map((header, colIdx) => (
+                                <td key={colIdx} className="px-3 py-2 text-xs whitespace-nowrap">
+                                  {row[header] || "-"}
+                                </td>
+                              ))
+                            ) : (
+                              <td className="px-3 py-2 text-xs">No data</td>
+                            )}
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={6} className="px-3 py-4 text-xs text-gray-500 text-center">
-                            {csvRows.length > 0 ? "Map columns to see preview" : "No data available"}
+                          <td
+                            colSpan={csvHeaders?.length || 1}
+                            className="px-3 py-4 text-xs text-gray-500 text-center"
+                          >
+                            No data available
                           </td>
                         </tr>
                       )}
@@ -330,11 +315,11 @@ export default function AddGroupDialog({ open, onClose }) {
 
               {/* Right: Column Mapping */}
               <div className="col-span-5 border rounded-lg overflow-hidden bg-white">
-                <div className="h-[360px] flex flex-col">
+                <div className="flex flex-col">
                   <div className="px-3 py-2 border-b bg-gray-50">
                     <p className="text-sm font-medium">Column Mapping</p>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  <div className="p-4 space-y-4">
                     <div>
                       <label className="text-xs font-medium text-gray-700 mb-1.5 block">
                         First Name
