@@ -16,6 +16,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -1149,7 +1154,35 @@ export default function ContactsTable() {
                         {!selectedContact && (
                           <>
                             <td className="p-2 max-w-[140px]">
-                              <TagsCell tags={contact.tags} />
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <div className="cursor-pointer min-h-[20px]">
+                                    {contact.tags && contact.tags.length > 0 ? (
+                                      <TagsCell tags={contact.tags} />
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">—</span>
+                                    )}
+                                  </div>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-3" align="start">
+                                  {contact.tags && contact.tags.length > 0 ? (
+                                    <div className="flex flex-col gap-1.5">
+                                      {contact.tags.map((tag, i) => (
+                                        <span
+                                          key={i}
+                                          className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
+                                        >
+                                          {tag.tag_name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-sm text-muted-foreground">
+                                      No tags assigned
+                                    </span>
+                                  )}
+                                </PopoverContent>
+                              </Popover>
                             </td>
 
                             <td className="p-2">
