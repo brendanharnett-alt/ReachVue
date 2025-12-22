@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from "react"
+import React, { useEffect, useState, useMemo, useRef, useLayoutEffect, useCallback } from "react"
 import { fetchContacts } from "../api"
 import CallModal from "./modals/CallModal"
 import LinkedInModal from "./modals/LinkedInModal"
@@ -45,6 +45,106 @@ import {
 } from "lucide-react"
 import ContactSidebar from "./ContactSidebar"
 import AddContactMenu from "./AddContactMenu"
+
+// 🔹 TagsCell component that adapts to available space
+function TagsCell({ tags }) {
+  const containerRef = useRef(null)
+  const [visibleCount, setVisibleCount] = useState(tags?.length || 0)
+  const [resizeKey, setResizeKey] = useState(0)
+
+  const calculateVisibleCount = useCallback(() => {
+    if (!tags || tags.length === 0) {
+      return 0
+    }
+
+    const container = containerRef.current
+    if (!container) {
+      return tags.length
+    }
+
+    const containerWidth = container.offsetWidth
+    if (containerWidth === 0) {
+      return tags.length
+    }
+
+    const gap = 4 // gap-1 = 4px
+    const plusNBaseWidth = 20 // Base width for "+"
+    const digitWidth = 6 // Approximate width per digit
+    const tagMaxWidth = 80
+    const tagPadding = 12 // px-1.5 = 6px * 2
+    
+    // Estimate widths for tags and calculate how many fit
+    let totalWidth = 0
+    let count = 0
+    
+    for (let i = 0; i < tags.length; i++) {
+      const tagName = tags[i].tag_name || ''
+      // Estimate tag width: min of actual text width (approx) or maxWidth
+      // Rough estimate: ~6px per character for text-xs
+      const estimatedTextWidth = Math.min(tagName.length * 6, tagMaxWidth - tagPadding)
+      const tagWidth = estimatedTextWidth + tagPadding
+      const neededWidth = totalWidth + tagWidth + (i > 0 ? gap : 0)
+      
+      // Check if we need space for +N indicator
+      const hasMore = i < tags.length - 1
+      const remainingCount = tags.length - (i + 1)
+      const plusNWidth = plusNBaseWidth + (remainingCount.toString().length * digitWidth)
+      const finalWidth = hasMore ? neededWidth + gap + plusNWidth : neededWidth
+      
+      if (finalWidth <= containerWidth) {
+        totalWidth = neededWidth
+        count = i + 1
+      } else {
+        break
+      }
+    }
+    
+    // Always show at least 1 tag if there are tags, even if it overflows slightly
+    return Math.max(1, Math.min(count || 1, tags.length))
+  }, [tags])
+
+  useLayoutEffect(() => {
+    const count = calculateVisibleCount()
+    setVisibleCount(count)
+  }, [tags, resizeKey, calculateVisibleCount])
+
+  // Re-measure on container resize
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const resizeObserver = new ResizeObserver(() => {
+      setResizeKey(prev => prev + 1)
+    })
+
+    resizeObserver.observe(container)
+    return () => resizeObserver.disconnect()
+  }, [])
+
+  if (!tags || tags.length === 0) return null
+
+  const visibleTags = tags.slice(0, visibleCount)
+  const remainingCount = tags.length - visibleCount
+
+  return (
+    <div ref={containerRef} className="flex items-center gap-1 flex-nowrap overflow-hidden w-full min-w-0">
+      {visibleTags.map((tag, i) => (
+        <span
+          key={i}
+          className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800 truncate flex-shrink min-w-0"
+          style={{ maxWidth: '80px' }}
+        >
+          {tag.tag_name}
+        </span>
+      ))}
+      {remainingCount > 0 && (
+        <span className="text-xs text-muted-foreground flex-shrink-0 whitespace-nowrap">
+          +{remainingCount}
+        </span>
+      )}
+    </div>
+  )
+}
 
 // 🔹 Dropdown for per-row actions (Email removed - now an icon button)
 export function ActionDropdown({ onCall, onLinkedIn, onLogTouch }) {
@@ -877,11 +977,11 @@ export default function ContactsTable() {
       {/* Table */}
       <div className="flex">
         <div
-          className={`relative h-[66vh] overflow-auto pb-5 ${
+          className={`relative h-[66vh] overflow-x-hidden overflow-y-auto pb-5 ${
             selectedContact ? "w-2/3" : "w-full"
           }`}
         >
-          <table className="table-auto text-sm w-full border-collapse">
+          <table className="table-auto text-sm w-full border-collapse max-w-full">
             <thead className="bg-muted sticky top-0 z-20">
               <tr className="text-left text-xs">
                 <th className="p-2 font-medium">
@@ -987,7 +1087,7 @@ export default function ContactsTable() {
                 </th>
                 {!selectedContact && (
                   <>
-                    <th className="p-2 font-medium">Tags</th>
+                    <th className="p-2 font-medium max-w-[140px]">Tags</th>
                     <th className="p-2 font-medium">Email / Phone</th>
                     <th className="p-2 font-medium">Action</th>
                   </>
@@ -1048,24 +1148,8 @@ export default function ContactsTable() {
 
                         {!selectedContact && (
                           <>
-                            <td className="p-2">
-                              {contact.tags && contact.tags.length > 0 ? (
-                                <div className="flex items-center gap-1 flex-nowrap overflow-hidden">
-                                  {contact.tags.slice(0, 2).map((tag, i) => (
-                                    <span
-                                      key={i}
-                                      className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800 max-w-[120px] truncate flex-shrink-0"
-                                    >
-                                      {tag.tag_name}
-                                    </span>
-                                  ))}
-                                  {contact.tags.length > 2 && (
-                                    <span className="text-xs text-muted-foreground flex-shrink-0">
-                                      +{contact.tags.length - 2}
-                                    </span>
-                                  )}
-                                </div>
-                              ) : null}
+                            <td className="p-2 max-w-[140px]">
+                              <TagsCell tags={contact.tags} />
                             </td>
 
                             <td className="p-2">
