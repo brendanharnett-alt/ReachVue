@@ -1049,16 +1049,23 @@ export default function ContactsTable() {
                         {!selectedContact && (
                           <>
                             <td className="p-2">
-                              <div className="flex flex-wrap gap-1 max-w-[160px] overflow-hidden">
-                                {contact.tags.map((tag, i) => (
-                                  <span
-                                    key={i}
-                                    className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 truncate"
-                                  >
-                                    {tag.tag_name}
-                                  </span>
-                                ))}
-                              </div>
+                              {contact.tags && contact.tags.length > 0 ? (
+                                <div className="flex items-center gap-1 flex-nowrap overflow-hidden">
+                                  {contact.tags.slice(0, 2).map((tag, i) => (
+                                    <span
+                                      key={i}
+                                      className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800 max-w-[120px] truncate flex-shrink-0"
+                                    >
+                                      {tag.tag_name}
+                                    </span>
+                                  ))}
+                                  {contact.tags.length > 2 && (
+                                    <span className="text-xs text-muted-foreground flex-shrink-0">
+                                      +{contact.tags.length - 2}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : null}
                             </td>
 
                             <td className="p-2">
