@@ -19,6 +19,7 @@ import {
   Popover,
   PopoverTrigger,
   PopoverContent,
+  PopoverAnchor,
 } from "@/components/ui/popover"
 import {
   Dialog,
@@ -47,6 +48,7 @@ import {
   Check,
   Trash2,
   Download,
+  X,
 } from "lucide-react"
 import ContactSidebar from "./ContactSidebar"
 import AddContactMenu from "./AddContactMenu"
@@ -151,6 +153,116 @@ function TagsCell({ tags }) {
   )
 }
 
+// 🔹 Manage Tags Popover component
+function ManageTagsPopover({ contact, allAvailableTags, onAddTag, onRemoveTag }) {
+  const [searchTerm, setSearchTerm] = useState("")
+  const contactTagNames = new Set((contact.tags || []).map((t) => t.tag_name))
+
+  // Filter available tags based on search term
+  const filteredTags = allAvailableTags.filter((tag) =>
+    tag.tag_name.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  // Check if search term matches an existing tag
+  const searchMatchesExisting = filteredTags.some(
+    (tag) => tag.tag_name.toLowerCase() === searchTerm.toLowerCase()
+  )
+
+  // Check if we should show "Create" option
+  const shouldShowCreate =
+    searchTerm.trim() &&
+    !searchMatchesExisting &&
+    !contactTagNames.has(searchTerm.trim())
+
+  const handleAddExistingTag = (tagName) => {
+    onAddTag(tagName)
+    setSearchTerm("")
+  }
+
+  const handleCreateAndAddTag = () => {
+    const trimmed = searchTerm.trim()
+    if (trimmed) {
+      onAddTag(trimmed)
+      setSearchTerm("")
+    }
+  }
+
+  return (
+    <div className="flex flex-col">
+      {/* Section 1: Add / Search / Create */}
+      <div className="p-3 border-b">
+        <Input
+          placeholder="Add or search tags"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="mb-2"
+          autoFocus
+        />
+        {searchTerm && (
+          <div className="max-h-40 overflow-y-auto">
+            {filteredTags.length > 0 && (
+              <div className="space-y-1">
+                {filteredTags
+                  .filter((tag) => !contactTagNames.has(tag.tag_name))
+                  .map((tag) => (
+                    <button
+                      key={tag.tag_id}
+                      onClick={() => handleAddExistingTag(tag.tag_name)}
+                      className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-gray-100 transition-colors"
+                    >
+                      {tag.tag_name}
+                    </button>
+                  ))}
+              </div>
+            )}
+            {shouldShowCreate && (
+              <button
+                onClick={handleCreateAndAddTag}
+                className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-gray-100 transition-colors text-blue-600 font-medium"
+              >
+                Create "{searchTerm.trim()}"
+              </button>
+            )}
+            {!shouldShowCreate && filteredTags.length === 0 && searchTerm && (
+              <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                No matching tags
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Section 2: Assigned Tags */}
+      <div className="p-3">
+        <div className="text-xs font-medium text-muted-foreground mb-2">
+          Assigned Tags
+        </div>
+        {contact.tags && contact.tags.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            {contact.tags.map((tag, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
+              >
+                <span>{tag.tag_name}</span>
+                <button
+                  onClick={() => onRemoveTag(tag.tag_name)}
+                  className="ml-2 hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                  aria-label={`Remove ${tag.tag_name}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <span className="text-sm text-muted-foreground">No tags assigned</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // 🔹 Dropdown for per-row actions (Email removed - now an icon button)
 export function ActionDropdown({ onCall, onLinkedIn, onLogTouch }) {
   return (
@@ -192,6 +304,9 @@ export default function ContactsTable() {
   const [showOutlookError, setShowOutlookError] = useState(false)
   const [showRefreshModal, setShowRefreshModal] = useState(false)
   const [timerId, setTimerId] = useState(null)
+  
+  // 🔹 Tag management state
+  const [manageTagsContactId, setManageTagsContactId] = useState(null)
 
   // ⭐ NEW — Email preset for replies
   const [emailPreset, setEmailPreset] = useState(null) 
@@ -299,6 +414,62 @@ export default function ContactsTable() {
     setSelectedContacts((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     )
+
+  // 🔹 Get all available tags from contacts (frontend-only)
+  const allAvailableTags = useMemo(() => {
+    const tagSet = new Set()
+    contacts.forEach((contact) => {
+      contact.tags?.forEach((tag) => {
+        tagSet.add(tag.tag_name)
+      })
+    })
+    return Array.from(tagSet).sort().map((tagName, index) => ({
+      tag_id: `temp-${index}`,
+      tag_name: tagName,
+    }))
+  }, [contacts])
+
+  // 🔹 Handle adding a tag to a contact (frontend-only)
+  const handleAddTagToContact = (contactId, tagName) => {
+    setContacts((prev) =>
+      prev.map((contact) => {
+        if (contact.id === contactId) {
+          const existingTags = contact.tags || []
+          // Check if tag already exists
+          if (existingTags.some((t) => t.tag_name === tagName)) {
+            return contact
+          }
+          // Add new tag
+          return {
+            ...contact,
+            tags: [
+              ...existingTags,
+              {
+                tag_id: `temp-${Date.now()}-${Math.random()}`,
+                tag_name: tagName,
+              },
+            ],
+          }
+        }
+        return contact
+      })
+    )
+  }
+
+  // 🔹 Handle removing a tag from a contact (frontend-only)
+  const handleRemoveTagFromContact = (contactId, tagName) => {
+    setContacts((prev) =>
+      prev.map((contact) => {
+        if (contact.id === contactId) {
+          return {
+            ...contact,
+            tags: (contact.tags || []).filter((t) => t.tag_name !== tagName),
+          }
+        }
+        return contact
+      })
+    )
+  }
 
   const clearFilters = () => {
     setFilters({ name: [], company: [], title: [], tag: [], lastTouch: null })
@@ -1154,35 +1325,84 @@ export default function ContactsTable() {
                         {!selectedContact && (
                           <>
                             <td className="p-2 max-w-[140px]">
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <div className="cursor-pointer min-h-[20px]">
-                                    {contact.tags && contact.tags.length > 0 ? (
-                                      <TagsCell tags={contact.tags} />
-                                    ) : (
-                                      <span className="text-xs text-muted-foreground">—</span>
-                                    )}
-                                  </div>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-3" align="start">
-                                  {contact.tags && contact.tags.length > 0 ? (
-                                    <div className="flex flex-col gap-1.5">
-                                      {contact.tags.map((tag, i) => (
-                                        <span
-                                          key={i}
-                                          className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
-                                        >
-                                          {tag.tag_name}
-                                        </span>
-                                      ))}
+                              <div className="relative">
+                                {/* Read-only peek popover */}
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <div className="cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 transition-colors min-h-[20px] flex items-center">
+                                      {contact.tags && contact.tags.length > 0 ? (
+                                        <TagsCell tags={contact.tags} />
+                                      ) : (
+                                        <span className="text-xs text-muted-foreground">—</span>
+                                      )}
                                     </div>
-                                  ) : (
-                                    <span className="text-sm text-muted-foreground">
-                                      No tags assigned
-                                    </span>
-                                  )}
-                                </PopoverContent>
-                              </Popover>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-3" align="start">
+                                    {contact.tags && contact.tags.length > 0 ? (
+                                      <>
+                                        <div className="flex flex-col gap-1.5 mb-3">
+                                          {contact.tags.map((tag, i) => (
+                                            <span
+                                              key={i}
+                                              className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
+                                            >
+                                              {tag.tag_name}
+                                            </span>
+                                          ))}
+                                        </div>
+                                        <button
+                                          className="text-blue-600 hover:text-blue-700 hover:underline text-sm text-left border-0 bg-transparent p-0"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setManageTagsContactId(contact.id)
+                                          }}
+                                        >
+                                          Edit tags
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="text-sm text-muted-foreground mb-3">
+                                          No tags yet
+                                        </div>
+                                        <button
+                                          className="text-blue-600 hover:text-blue-700 hover:underline text-sm text-left border-0 bg-transparent p-0"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setManageTagsContactId(contact.id)
+                                          }}
+                                        >
+                                          Edit tags
+                                        </button>
+                                      </>
+                                    )}
+                                  </PopoverContent>
+                                </Popover>
+                                
+                                {/* Manage tags popover */}
+                                <Popover
+                                  open={manageTagsContactId === contact.id}
+                                  onOpenChange={(open) =>
+                                    setManageTagsContactId(open ? contact.id : null)
+                                  }
+                                >
+                                  <PopoverAnchor asChild>
+                                    <div className="absolute inset-0 pointer-events-none" />
+                                  </PopoverAnchor>
+                                  <PopoverContent className="w-64 p-0" align="start">
+                                    <ManageTagsPopover
+                                      contact={contact}
+                                      allAvailableTags={allAvailableTags}
+                                      onAddTag={(tagName) => {
+                                        handleAddTagToContact(contact.id, tagName)
+                                      }}
+                                      onRemoveTag={(tagName) => {
+                                        handleRemoveTagFromContact(contact.id, tagName)
+                                      }}
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
                             </td>
 
                             <td className="p-2">
