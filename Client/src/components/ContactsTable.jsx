@@ -19,7 +19,6 @@ import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-  PopoverAnchor,
 } from "@/components/ui/popover"
 import {
   Dialog,
@@ -49,6 +48,8 @@ import {
   Trash2,
   Download,
   X,
+  Plus,
+  Minus,
 } from "lucide-react"
 import ContactSidebar from "./ContactSidebar"
 import AddContactMenu from "./AddContactMenu"
@@ -153,101 +154,315 @@ function TagsCell({ tags }) {
   )
 }
 
+// 🔹 Tags Cell with Centered Modal component
+function TagsCellAnchor({ contact, onEditTags, manageTagsOpen, allAvailableTags, onApply, onCancel }) {
+
+  return (
+    <>
+      <div className="relative">
+        {/* Read-only peek popover */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <div 
+              className="cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 transition-colors min-h-[20px] flex items-center"
+            >
+              {contact.tags && contact.tags.length > 0 ? (
+                <TagsCell tags={contact.tags} />
+              ) : (
+                <span className="text-xs text-muted-foreground">—</span>
+              )}
+            </div>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-3" align="start">
+            {contact.tags && contact.tags.length > 0 ? (
+              <>
+                <div className="flex flex-col gap-1.5 mb-3">
+                  {contact.tags.map((tag, i) => (
+                    <span
+                      key={i}
+                      className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
+                    >
+                      {tag.tag_name}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  className="text-blue-600 hover:text-blue-700 hover:underline text-sm text-left border-0 bg-transparent p-0"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onEditTags()
+                  }}
+                >
+                  Edit tags
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="text-sm text-muted-foreground mb-3">
+                  No tags yet
+                </div>
+                <button
+                  className="text-blue-600 hover:text-blue-700 hover:underline text-sm text-left border-0 bg-transparent p-0"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onEditTags()
+                  }}
+                >
+                  Edit tags
+                </button>
+              </>
+            )}
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      {/* Manage tags modal - centered */}
+      <Dialog 
+        open={manageTagsOpen} 
+        onOpenChange={(open) => {
+          // Only allow closing via Apply, Cancel, or Esc
+          if (!open) {
+            onCancel()
+          }
+        }} 
+        modal={true}
+      >
+        <DialogContent
+          onInteractOutside={(e) => {
+            // Prevent closing on outside click
+            e.preventDefault()
+          }}
+          onEscapeKeyDown={(e) => {
+            // Allow Esc to close
+            onCancel()
+            e.preventDefault()
+          }}
+          className="w-[640px] max-w-[720px] max-h-[75vh] p-0 overflow-visible flex flex-col [&>button]:hidden"
+        >
+          <ManageTagsPopover
+            contact={contact}
+            allAvailableTags={allAvailableTags}
+            onApply={onApply}
+            onCancel={onCancel}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
 // 🔹 Manage Tags Popover component
-function ManageTagsPopover({ contact, allAvailableTags, onAddTag, onRemoveTag }) {
-  const [searchTerm, setSearchTerm] = useState("")
-  const contactTagNames = new Set((contact.tags || []).map((t) => t.tag_name))
-
-  // Filter available tags based on search term
-  const filteredTags = allAvailableTags.filter((tag) =>
-    tag.tag_name.toLowerCase().includes(searchTerm.toLowerCase())
+function ManageTagsPopover({ contact, allAvailableTags, onApply, onCancel }) {
+  // Original tags for comparison
+  const originalTags = contact.tags || []
+  const originalTagNames = new Set(originalTags.map((t) => t.tag_name))
+  
+  // Staged changes: tags to add and tags to remove
+  const [tagsToAdd, setTagsToAdd] = useState([])
+  const [tagsToRemove, setTagsToRemove] = useState(new Set())
+  
+  // Search states for Add and Remove sections
+  const [addSearchTerm, setAddSearchTerm] = useState("")
+  const [addInputFocused, setAddInputFocused] = useState(false)
+  const [addHighlightedIndex, setAddHighlightedIndex] = useState(-1)
+  
+  const [removeSearchTerm, setRemoveSearchTerm] = useState("")
+  const [removeInputFocused, setRemoveInputFocused] = useState(false)
+  const [removeHighlightedIndex, setRemoveHighlightedIndex] = useState(-1)
+  
+  // Current state: original + added - removed
+  const addedTagNames = new Set(tagsToAdd.map((t) => t.tag_name))
+  const allCurrentTagNames = new Set([
+    ...originalTags.map((t) => t.tag_name),
+    ...tagsToAdd.map((t) => t.tag_name),
+  ])
+  
+  // Filter available tags for Add section
+  const filteredTagsForAdd = allAvailableTags.filter((tag) =>
+    tag.tag_name.toLowerCase().includes(addSearchTerm.toLowerCase())
+  )
+  const availableForAdd = filteredTagsForAdd.filter(
+    (tag) => !allCurrentTagNames.has(tag.tag_name) || tagsToRemove.has(tag.tag_name)
+  )
+  
+  // Filter tags for Remove section (only currently assigned tags)
+  const tagsForRemove = originalTags.filter((tag) => !tagsToRemove.has(tag.tag_name))
+  const filteredTagsForRemove = tagsForRemove.filter((tag) =>
+    tag.tag_name.toLowerCase().includes(removeSearchTerm.toLowerCase())
   )
 
-  // Check if search term matches an existing tag
-  const searchMatchesExisting = filteredTags.some(
-    (tag) => tag.tag_name.toLowerCase() === searchTerm.toLowerCase()
+  // Check if we should show "Create" option for Add
+  const addSearchMatchesExisting = filteredTagsForAdd.some(
+    (tag) => tag.tag_name.toLowerCase() === addSearchTerm.toLowerCase()
   )
-
-  // Check if we should show "Create" option
-  const shouldShowCreate =
-    searchTerm.trim() &&
-    !searchMatchesExisting &&
-    !contactTagNames.has(searchTerm.trim())
+  const shouldShowCreateAdd =
+    addSearchTerm.trim() &&
+    !addSearchMatchesExisting &&
+    !allCurrentTagNames.has(addSearchTerm.trim())
 
   const handleAddExistingTag = (tagName) => {
-    onAddTag(tagName)
-    setSearchTerm("")
+    // If tag was marked for removal, unmark it
+    if (tagsToRemove.has(tagName)) {
+      setTagsToRemove((prev) => {
+        const next = new Set(prev)
+        next.delete(tagName)
+        return next
+      })
+    } else if (!allCurrentTagNames.has(tagName)) {
+      // Add new tag
+      setTagsToAdd((prev) => [
+        ...prev,
+        {
+          tag_id: `temp-${Date.now()}-${Math.random()}`,
+          tag_name: tagName,
+        },
+      ])
+    }
+    setAddSearchTerm("")
+    setAddHighlightedIndex(-1)
+    setAddInputFocused(false) // Close dropdown after selection
   }
 
   const handleCreateAndAddTag = () => {
-    const trimmed = searchTerm.trim()
-    if (trimmed) {
-      onAddTag(trimmed)
-      setSearchTerm("")
+    const trimmed = addSearchTerm.trim()
+    if (trimmed && !allCurrentTagNames.has(trimmed)) {
+      setTagsToAdd((prev) => [
+        ...prev,
+        {
+          tag_id: `temp-${Date.now()}-${Math.random()}`,
+          tag_name: trimmed,
+        },
+      ])
+      setAddSearchTerm("")
+      setAddHighlightedIndex(-1)
+      setAddInputFocused(false) // Close dropdown after selection
     }
   }
 
+  const handleRemoveTag = (tagName) => {
+    // Mark tag for removal
+    setTagsToRemove((prev) => new Set([...prev, tagName]))
+    // If tag was in tagsToAdd, remove it
+    setTagsToAdd((prev) => prev.filter((t) => t.tag_name !== tagName))
+    setRemoveSearchTerm("")
+    setRemoveHighlightedIndex(-1)
+    setRemoveInputFocused(false) // Close dropdown after selection
+  }
+  
+  const handleRemoveAllTags = () => {
+    // Remove all tags
+    const allTagNames = new Set(tagsForRemove.map((t) => t.tag_name))
+    setTagsToRemove((prev) => new Set([...prev, ...allTagNames]))
+    setRemoveSearchTerm("")
+    setRemoveHighlightedIndex(-1)
+    setRemoveInputFocused(false) // Close dropdown after selection
+  }
+
+
+  const handleAddKeyDown = (e) => {
+    if (e.key === "Escape") {
+      onCancel()
+    } else if (e.key === "Enter" && addSearchTerm.trim()) {
+      e.preventDefault()
+      if (shouldShowCreateAdd) {
+        handleCreateAndAddTag()
+      } else if (availableForAdd.length > 0 && addHighlightedIndex >= 0) {
+        handleAddExistingTag(availableForAdd[addHighlightedIndex].tag_name)
+      } else if (availableForAdd.length === 1) {
+        handleAddExistingTag(availableForAdd[0].tag_name)
+      }
+    } else if (e.key === "ArrowDown" && availableForAdd.length > 0) {
+      e.preventDefault()
+      setAddHighlightedIndex((prev) =>
+        prev < availableForAdd.length - 1 ? prev + 1 : 0
+      )
+    } else if (e.key === "ArrowUp" && availableForAdd.length > 0) {
+      e.preventDefault()
+      setAddHighlightedIndex((prev) =>
+        prev > 0 ? prev - 1 : availableForAdd.length - 1
+      )
+    }
+  }
+
+  const handleRemoveKeyDown = (e) => {
+    if (e.key === "Escape") {
+      onCancel()
+    } else if (e.key === "Enter" && filteredTagsForRemove.length > 0) {
+      e.preventDefault()
+      if (removeHighlightedIndex >= 0) {
+        handleRemoveTag(filteredTagsForRemove[removeHighlightedIndex].tag_name)
+      } else if (filteredTagsForRemove.length === 1) {
+        handleRemoveTag(filteredTagsForRemove[0].tag_name)
+      }
+    } else if (e.key === "ArrowDown" && filteredTagsForRemove.length > 0) {
+      e.preventDefault()
+      setRemoveHighlightedIndex((prev) =>
+        prev < filteredTagsForRemove.length - 1 ? prev + 1 : 0
+      )
+    } else if (e.key === "ArrowUp" && filteredTagsForRemove.length > 0) {
+      e.preventDefault()
+      setRemoveHighlightedIndex((prev) =>
+        prev > 0 ? prev - 1 : filteredTagsForRemove.length - 1
+      )
+    }
+  }
+
+  const handleApply = () => {
+    // Calculate final tags: original + added - removed
+    const finalTags = [
+      ...originalTags.filter((tag) => !tagsToRemove.has(tag.tag_name)),
+      ...tagsToAdd,
+    ]
+    onApply(finalTags)
+  }
+
+  const showAddDropdown = addInputFocused && (addSearchTerm || availableForAdd.length > 0)
+  const showRemoveDropdown = removeInputFocused && (removeSearchTerm || filteredTagsForRemove.length > 0)
+
   return (
-    <div className="flex flex-col">
-      {/* Section 1: Add / Search / Create */}
-      <div className="p-3 border-b">
-        <Input
-          placeholder="Add or search tags"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="mb-2"
-          autoFocus
-        />
-        {searchTerm && (
-          <div className="max-h-40 overflow-y-auto">
-            {filteredTags.length > 0 && (
-              <div className="space-y-1">
-                {filteredTags
-                  .filter((tag) => !contactTagNames.has(tag.tag_name))
-                  .map((tag) => (
-                    <button
-                      key={tag.tag_id}
-                      onClick={() => handleAddExistingTag(tag.tag_name)}
-                      className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-gray-100 transition-colors"
-                    >
-                      {tag.tag_name}
-                    </button>
-                  ))}
-              </div>
-            )}
-            {shouldShowCreate && (
-              <button
-                onClick={handleCreateAndAddTag}
-                className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-gray-100 transition-colors text-blue-600 font-medium"
-              >
-                Create "{searchTerm.trim()}"
-              </button>
-            )}
-            {!shouldShowCreate && filteredTags.length === 0 && searchTerm && (
-              <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                No matching tags
-              </div>
-            )}
-          </div>
-        )}
+    <div
+      className="flex flex-col h-full min-h-0"
+      onMouseDown={(e) => {
+        // Prevent popover from closing when clicking inside
+        e.stopPropagation()
+      }}
+      onClick={(e) => {
+        e.stopPropagation()
+      }}
+    >
+      {/* Header with title and X button */}
+      <div className="p-3 border-b flex items-center justify-between gap-3 flex-shrink-0">
+        <div className="text-sm font-medium">
+          Edit Tags for {contact.first_name} {contact.last_name}
+        </div>
+        <button
+          onClick={onCancel}
+          className="rounded-sm opacity-70 hover:opacity-100 transition-opacity focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
-      {/* Section 2: Assigned Tags */}
-      <div className="p-3">
-        <div className="text-xs font-medium text-muted-foreground mb-2">
-          Assigned Tags
-        </div>
-        {contact.tags && contact.tags.length > 0 ? (
-          <div className="flex flex-col gap-1.5">
-            {contact.tags.map((tag, i) => (
+      {/* Section 1: Add Tags */}
+      <div className="p-3 border-b relative flex-shrink-0 overflow-visible">
+        <label className="text-xs font-medium text-muted-foreground mb-2 block">
+          Add Tags
+        </label>
+        {/* Show staged tags to add as pills with X buttons */}
+        {tagsToAdd.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {tagsToAdd.map((tag, i) => (
               <div
-                key={i}
-                className="flex items-center justify-between rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
+                key={`add-${i}`}
+                className="flex items-center gap-1 rounded-full bg-green-100 text-green-800 border border-green-300 px-2 py-1 text-xs font-medium"
               >
                 <span>{tag.tag_name}</span>
                 <button
-                  onClick={() => onRemoveTag(tag.tag_name)}
-                  className="ml-2 hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                  onClick={() => {
+                    setTagsToAdd((prev) => prev.filter((t) => t.tag_name !== tag.tag_name))
+                  }}
+                  className="hover:bg-green-200 rounded-full p-0.5 transition-colors"
                   aria-label={`Remove ${tag.tag_name}`}
                 >
                   <X className="h-3 w-3" />
@@ -255,9 +470,260 @@ function ManageTagsPopover({ contact, allAvailableTags, onAddTag, onRemoveTag })
               </div>
             ))}
           </div>
-        ) : (
-          <span className="text-sm text-muted-foreground">No tags assigned</span>
         )}
+        <Input
+          placeholder="Create or Search Tags"
+          value={addSearchTerm}
+          onChange={(e) => {
+            setAddSearchTerm(e.target.value)
+            setAddHighlightedIndex(-1)
+            setAddInputFocused(true) // Reopen dropdown when typing
+          }}
+          onFocus={() => setAddInputFocused(true)}
+          onClick={() => setAddInputFocused(true)} // Reopen dropdown when clicking into input
+          onBlur={(e) => {
+            const relatedTarget = e.relatedTarget
+            const dropdownElement = e.currentTarget.parentElement?.querySelector('[data-dropdown="add"]')
+            if (!dropdownElement || !dropdownElement.contains(relatedTarget)) {
+              setTimeout(() => {
+                if (!dropdownElement?.contains(document.activeElement)) {
+                  setAddInputFocused(false)
+                }
+              }, 200)
+            }
+          }}
+          onKeyDown={handleAddKeyDown}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          name="tag-add-input"
+          type="search"
+          inputMode="search"
+          role="searchbox"
+        />
+        {showAddDropdown && (
+          <div
+            data-dropdown="add"
+            className="absolute z-[100] w-full mt-1 left-3 right-3 bg-white border rounded-md shadow-lg max-h-80 overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-gray-400 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-gray-500 [&::-webkit-scrollbar-track]:bg-gray-100"
+            style={{ maxHeight: '20rem' }}
+            onMouseDown={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
+            onScroll={(e) => {
+              e.stopPropagation()
+            }}
+          >
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (addSearchTerm.trim() && shouldShowCreateAdd) {
+                  handleCreateAndAddTag()
+                } else if (addSearchTerm.trim()) {
+                  // Tag already exists, just close dropdown
+                  setAddInputFocused(false)
+                } else {
+                  // No search term - create with default name
+                  const newTagName = `New Tag ${Date.now()}`
+                  if (!allCurrentTagNames.has(newTagName)) {
+                    setTagsToAdd((prev) => [
+                      ...prev,
+                      {
+                        tag_id: `temp-${Date.now()}-${Math.random()}`,
+                        tag_name: newTagName,
+                      },
+                    ])
+                    setAddSearchTerm("")
+                    setAddHighlightedIndex(-1)
+                    setAddInputFocused(false)
+                  }
+                }
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+              }}
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 transition-colors text-blue-600 font-medium flex items-center gap-2 border-b"
+            >
+              <Plus className="h-4 w-4" />
+              {addSearchTerm.trim() && shouldShowCreateAdd ? `Create "${addSearchTerm.trim()}"` : "Create new"}
+            </button>
+            {availableForAdd.length > 0 && (
+              <div className="py-1">
+                {availableForAdd.map((tag, index) => (
+                  <button
+                    key={tag.tag_id}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      handleAddExistingTag(tag.tag_name)
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                    }}
+                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 transition-colors ${
+                      addHighlightedIndex === index ? "bg-gray-100" : ""
+                    }`}
+                  >
+                    {tag.tag_name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!shouldShowCreateAdd && availableForAdd.length === 0 && addSearchTerm && (
+              <div className="px-3 py-1.5 text-sm text-muted-foreground">
+                No matching tags
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Section 2: Remove Tags */}
+      <div className="p-3 border-b relative flex-shrink-0 overflow-visible">
+        <label className="text-xs font-medium text-muted-foreground mb-2 block">
+          Remove Tags
+        </label>
+        {/* Show staged tags to remove as pills with X buttons */}
+        {tagsToRemove.size > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {Array.from(tagsToRemove).map((tagName, i) => {
+              const tag = originalTags.find((t) => t.tag_name === tagName)
+              if (!tag) return null
+              return (
+                <div
+                  key={`remove-${i}`}
+                  className="flex items-center gap-1 rounded-full bg-green-100 text-green-800 border border-green-300 px-2 py-1 text-xs font-medium"
+                >
+                  <span>{tag.tag_name}</span>
+                  <button
+                    onClick={() => {
+                      setTagsToRemove((prev) => {
+                        const next = new Set(prev)
+                        next.delete(tagName)
+                        return next
+                      })
+                    }}
+                    className="hover:bg-green-200 rounded-full p-0.5 transition-colors"
+                    aria-label={`Cancel removal of ${tag.tag_name}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <Input
+          placeholder="Select Tags to Remove"
+          value={removeSearchTerm}
+          onChange={(e) => {
+            setRemoveSearchTerm(e.target.value)
+            setRemoveHighlightedIndex(-1)
+            setRemoveInputFocused(true) // Reopen dropdown when typing
+          }}
+          onFocus={() => setRemoveInputFocused(true)}
+          onClick={() => setRemoveInputFocused(true)} // Reopen dropdown when clicking into input
+          onBlur={(e) => {
+            const relatedTarget = e.relatedTarget
+            const dropdownElement = e.currentTarget.parentElement?.querySelector('[data-dropdown="remove"]')
+            if (!dropdownElement || !dropdownElement.contains(relatedTarget)) {
+              setTimeout(() => {
+                if (!dropdownElement?.contains(document.activeElement)) {
+                  setRemoveInputFocused(false)
+                }
+              }, 200)
+            }
+          }}
+          onKeyDown={handleRemoveKeyDown}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          name="tag-remove-input"
+          type="search"
+          inputMode="search"
+          role="searchbox"
+        />
+        {showRemoveDropdown && (
+          <div
+            data-dropdown="remove"
+            className="absolute z-50 w-full mt-1 left-3 right-3 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
+            onScroll={(e) => {
+              e.stopPropagation()
+            }}
+          >
+            {filteredTagsForRemove.length > 0 ? (
+              <>
+                {tagsForRemove.length > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      handleRemoveAllTags()
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 transition-colors text-red-600 font-medium border-b flex items-center gap-2"
+                  >
+                    <Minus className="h-4 w-4" />
+                    Remove all tags
+                  </button>
+                )}
+                <div className="py-1">
+                  {filteredTagsForRemove.map((tag, index) => (
+                    <button
+                      key={tag.tag_id || `remove-${index}`}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleRemoveTag(tag.tag_name)
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                      }}
+                      className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 transition-colors ${
+                        removeHighlightedIndex === index ? "bg-gray-100" : ""
+                      }`}
+                    >
+                      {tag.tag_name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="px-3 py-1.5 text-sm text-muted-foreground">
+                No tags to remove
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Footer with Update/Cancel */}
+      <div className="p-3 border-t flex justify-end gap-2 flex-shrink-0">
+        <Button variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button onClick={handleApply}>
+          Update
+        </Button>
       </div>
     </div>
   )
@@ -1325,84 +1791,26 @@ export default function ContactsTable() {
                         {!selectedContact && (
                           <>
                             <td className="p-2 max-w-[140px]">
-                              <div className="relative">
-                                {/* Read-only peek popover */}
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <div className="cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 transition-colors min-h-[20px] flex items-center">
-                                      {contact.tags && contact.tags.length > 0 ? (
-                                        <TagsCell tags={contact.tags} />
-                                      ) : (
-                                        <span className="text-xs text-muted-foreground">—</span>
-                                      )}
-                                    </div>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-auto p-3" align="start">
-                                    {contact.tags && contact.tags.length > 0 ? (
-                                      <>
-                                        <div className="flex flex-col gap-1.5 mb-3">
-                                          {contact.tags.map((tag, i) => (
-                                            <span
-                                              key={i}
-                                              className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
-                                            >
-                                              {tag.tag_name}
-                                            </span>
-                                          ))}
-                                        </div>
-                                        <button
-                                          className="text-blue-600 hover:text-blue-700 hover:underline text-sm text-left border-0 bg-transparent p-0"
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            setManageTagsContactId(contact.id)
-                                          }}
-                                        >
-                                          Edit tags
-                                        </button>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <div className="text-sm text-muted-foreground mb-3">
-                                          No tags yet
-                                        </div>
-                                        <button
-                                          className="text-blue-600 hover:text-blue-700 hover:underline text-sm text-left border-0 bg-transparent p-0"
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            setManageTagsContactId(contact.id)
-                                          }}
-                                        >
-                                          Edit tags
-                                        </button>
-                                      </>
-                                    )}
-                                  </PopoverContent>
-                                </Popover>
-                                
-                                {/* Manage tags popover */}
-                                <Popover
-                                  open={manageTagsContactId === contact.id}
-                                  onOpenChange={(open) =>
-                                    setManageTagsContactId(open ? contact.id : null)
-                                  }
-                                >
-                                  <PopoverAnchor asChild>
-                                    <div className="absolute inset-0 pointer-events-none" />
-                                  </PopoverAnchor>
-                                  <PopoverContent className="w-64 p-0" align="start">
-                                    <ManageTagsPopover
-                                      contact={contact}
-                                      allAvailableTags={allAvailableTags}
-                                      onAddTag={(tagName) => {
-                                        handleAddTagToContact(contact.id, tagName)
-                                      }}
-                                      onRemoveTag={(tagName) => {
-                                        handleRemoveTagFromContact(contact.id, tagName)
-                                      }}
-                                    />
-                                  </PopoverContent>
-                                </Popover>
-                              </div>
+                              <TagsCellAnchor
+                                contact={contact}
+                                onEditTags={() => setManageTagsContactId(contact.id)}
+                                manageTagsOpen={manageTagsContactId === contact.id}
+                                allAvailableTags={allAvailableTags}
+                                onApply={(draftTags) => {
+                                  // Update contact with draft tags
+                                  setContacts((prev) =>
+                                    prev.map((c) =>
+                                      c.id === contact.id
+                                        ? { ...c, tags: draftTags }
+                                        : c
+                                    )
+                                  )
+                                  setManageTagsContactId(null)
+                                }}
+                                onCancel={() => {
+                                  setManageTagsContactId(null)
+                                }}
+                              />
                             </td>
 
                             <td className="p-2">
