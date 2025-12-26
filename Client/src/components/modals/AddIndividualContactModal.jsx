@@ -9,17 +9,19 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-export default function AddIndividualContactModal({ open, onClose, existingTags = [] }) {
+export default function AddIndividualContactModal({ open, onClose, existingTags = [], contact = null, onSuccess }) {
+  const isEditMode = !!contact
+  
   const [formData, setFormData] = useState({
-    company: "",
-    firstName: "",
-    lastName: "",
-    title: "",
-    email: "",
-    phone: "",
-    linkedInUrl: "",
-    tags: [],
-    notes: "",
+    company: contact?.company || "",
+    firstName: contact?.first_name || "",
+    lastName: contact?.last_name || "",
+    title: contact?.title || "",
+    email: contact?.email || "",
+    phone: contact?.mobile_phone || "",
+    linkedInUrl: contact?.linkedin_url || "",
+    tags: contact?.tags?.map(t => t.tag_name) || [],
+    notes: contact?.notes || "",
   })
   const [tagInput, setTagInput] = useState("")
   const [showTagSuggestions, setShowTagSuggestions] = useState(false)
@@ -99,6 +101,36 @@ export default function AddIndividualContactModal({ open, onClose, existingTags 
 
   // Close suggestions when clicking outside
   useEffect(() => {
+    if (contact && open) {
+      // Pre-fill form when editing
+      setFormData({
+        company: contact.company || "",
+        firstName: contact.first_name || "",
+        lastName: contact.last_name || "",
+        title: contact.title || "",
+        email: contact.email || "",
+        phone: contact.mobile_phone || "",
+        linkedInUrl: contact.linkedin_url || "",
+        tags: contact.tags?.map(t => t.tag_name) || [],
+        notes: contact.notes || "",
+      })
+    } else if (!contact && open) {
+      // Reset form when adding new contact
+      setFormData({
+        company: "",
+        firstName: "",
+        lastName: "",
+        title: "",
+        email: "",
+        phone: "",
+        linkedInUrl: "",
+        tags: [],
+        notes: "",
+      })
+    }
+  }, [contact, open])
+
+  useEffect(() => {
     const handleClickOutside = (event) => {
       if (
         suggestionsRef.current &&
@@ -115,22 +147,38 @@ export default function AddIndividualContactModal({ open, onClose, existingTags 
 
   const handleSubmit = () => {
     // Stub - no backend wiring
-    console.log("Add contact:", formData)
+    const contactData = {
+      ...formData,
+      id: contact?.id,
+      first_name: formData.firstName,
+      last_name: formData.lastName,
+      mobile_phone: formData.phone,
+      linkedin_url: formData.linkedInUrl,
+    }
+    
+    if (isEditMode && onSuccess) {
+      onSuccess(contactData)
+    } else {
+      console.log("Add contact:", contactData)
+    }
+    
     onClose()
-    // Reset form
-    setFormData({
-      company: "",
-      firstName: "",
-      lastName: "",
-      title: "",
-      email: "",
-      phone: "",
-      linkedInUrl: "",
-      tags: [],
-      notes: "",
-    })
-    setTagInput("")
-    setShowNotes(false)
+    // Reset form only if not in edit mode
+    if (!isEditMode) {
+      setFormData({
+        company: "",
+        firstName: "",
+        lastName: "",
+        title: "",
+        email: "",
+        phone: "",
+        linkedInUrl: "",
+        tags: [],
+        notes: "",
+      })
+      setTagInput("")
+      setShowNotes(false)
+    }
   }
 
   const handleCancel = () => {
@@ -156,7 +204,9 @@ export default function AddIndividualContactModal({ open, onClose, existingTags 
       <DialogContent className="max-w-lg p-0 overflow-hidden !animate-none !duration-0">
         {/* Header */}
         <DialogHeader className="px-5 pt-2.5 pb-1">
-          <DialogTitle className="text-base">Add Individual Contact</DialogTitle>
+          <DialogTitle className="text-base">
+            {isEditMode ? "Edit Contact" : "Add Individual Contact"}
+          </DialogTitle>
           <DialogDescription className="text-xs text-gray-500">
             All fields are optional.
           </DialogDescription>
@@ -342,7 +392,7 @@ export default function AddIndividualContactModal({ open, onClose, existingTags 
             Cancel
           </Button>
           <Button onClick={handleSubmit} className="bg-primary text-white">
-            Add Contact
+            {isEditMode ? "Save Changes" : "Add Contact"}
           </Button>
         </DialogFooter>
       </DialogContent>

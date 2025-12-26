@@ -1865,6 +1865,10 @@ export default function ContactsTable() {
           <ContactSidebar
             contact={selectedContact}
             onClose={() => setSelectedContact(null)}
+            onEmail={(contact) => openDialog("email", contact)}
+            onCall={(contact) => openDialog("call", contact)}
+            onTouch={(contact) => openDialog("touch", contact)}
+            onLinkedIn={(contact) => openDialog("linkedin", contact)}
           />
         )}
       </div>
