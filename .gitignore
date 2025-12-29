@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 Client/node_modules/
+Client/dist
 
 # Vite build cache (VERY IMPORTANT)
 Client/node_modules/.vite/
