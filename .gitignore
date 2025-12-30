@@ -1,3 +1,6 @@
+#cursor logs
+.cursor/
+
 #environment variables
 .env
 

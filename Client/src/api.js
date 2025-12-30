@@ -89,6 +89,7 @@ export async function logTouch({
   body = "",
   metadata = {},
   cadence_id = null,
+  track_opens = false,
 }) {
   try {
     const touchPayload = {
@@ -99,6 +100,7 @@ export async function logTouch({
       body,
       metadata: JSON.stringify(metadata),
       cadence_id,
+      track_opens,
     }
 
     const res = await fetch(`${BASE_URL}/touches`, {

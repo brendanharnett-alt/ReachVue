@@ -135,25 +135,53 @@ export default function EmailModal({
         return
       }
 
-      // 🔹 Send to Outlook extension
+      // 🔹 Log touch first with clean body (no tracking pixel in database)
+      console.log("📧 [EmailModal] Starting send - trackOpens:", trackOpens, "type:", typeof trackOpens)
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:139',message:'Before logTouch call',data:{trackOpens,typeofTrackOpens:typeof trackOpens,bodyLength:bodyHtml.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      
+      const touchResult = await logTouch({
+        contact_id: contact.id,
+        touch_type: "email",
+        subject,
+        body: bodyHtml, // Clean body stored in DB
+        metadata: { to: recipient },
+        track_opens: trackOpens,
+      })
+
+      console.log("📧 [EmailModal] touchResult received:", touchResult)
+      console.log("📧 [EmailModal] touchResult.tracking:", touchResult?.tracking)
+      console.log("📧 [EmailModal] touchResult.id:", touchResult?.id)
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:147',message:'After logTouch call',data:{hasTracking:!!touchResult?.tracking,tracking:touchResult?.tracking,touchId:touchResult?.id,fullResult:JSON.stringify(touchResult).substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+
+      // 🔹 Inject tracking pixel into email body if tracking is enabled
+      let emailBodyForOutlook = bodyHtml
+      console.log("📧 [EmailModal] Condition check - trackOpens:", trackOpens, "touchResult.tracking:", touchResult?.tracking, "will inject:", trackOpens && !!touchResult?.tracking)
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:150',message:'Pixel injection condition check',data:{trackOpens,hasTracking:!!touchResult?.tracking,willInject:trackOpens && !!touchResult?.tracking,conditionResult:trackOpens && touchResult?.tracking},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      
+      if (trackOpens && touchResult.tracking) {
+        const { email_id, signature } = touchResult.tracking
+        const trackingPixel = `<img src="https://t.reachvue.com/o?e=${email_id}&s=${signature}" width="1" height="1" style="display:none" />`
+        emailBodyForOutlook = bodyHtml + trackingPixel
+        console.log("📧 [EmailModal] ✅ Tracking pixel injected!")
+        console.log("📧 [EmailModal] Pixel:", trackingPixel)
+        console.log("📧 [EmailModal] Original body length:", bodyHtml.length, "Final body length:", emailBodyForOutlook.length)
+        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:153',message:'Tracking pixel injected successfully',data:{email_id,signatureLength:signature?.length,pixelLength:trackingPixel.length,bodyLength:bodyHtml.length,finalLength:emailBodyForOutlook.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      } else {
+        console.log("📧 [EmailModal] ❌ Tracking pixel NOT injected")
+        console.log("📧 [EmailModal] Reason - trackOpens:", trackOpens, "hasTracking:", !!touchResult?.tracking)
+        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:154',message:'Tracking pixel NOT injected',data:{reason:!trackOpens?'trackOpens is false':!touchResult?.tracking?'touchResult.tracking is missing':'unknown',trackOpens,hasTracking:!!touchResult?.tracking},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      }
+
+      // 🔹 Send to Outlook extension with tracking pixel (if enabled)
       window.postMessage(
         {
           type: "open-outlook-and-paste",
-          emailBodyHtml: bodyHtml,
+          emailBodyHtml: emailBodyForOutlook,
           emailSubject: subject,
           recipient,
         },
         "*"
       )
-
-      // 🔹 Log touch immediately
-      await logTouch({
-        contact_id: contact.id,
-        touch_type: "email",
-        subject,
-        body: bodyHtml,
-        metadata: { to: recipient },
-      })
 
       // 🔹 Notify parent to refresh last touch date
       const now = new Date().toISOString()

@@ -377,13 +377,22 @@ app.post('/send-email', async (req, res) => {
 // ----------------------
 
 app.post('/touches', async (req, res) => {
-  const { contact_id, touched_at, touch_type, subject, body, metadata, cadence_id, thread_id, parent_touch_id } = req.body;
+  const { contact_id, touched_at, touch_type, subject, body, metadata, cadence_id, thread_id, parent_touch_id, track_opens } = req.body;
+
+  console.log('🔍 [Backend] POST /touches - Received request:', {
+    touch_type,
+    track_opens,
+    track_opens_type: typeof track_opens,
+    track_opens_value: track_opens,
+    has_contact_id: !!contact_id
+  });
 
   if (!contact_id || !touch_type) {
     return res.status(400).send("Missing required fields: contact_id and touch_type");
   }
 
   try {
+    // Insert touch with clean body (no tracking pixel)
     const result = await pool.query(
       `
       INSERT INTO touches
@@ -404,7 +413,52 @@ app.post('/touches', async (req, res) => {
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    const touch = result.rows[0];
+    
+    console.log('🔍 [Backend] Touch created:', {
+      touch_id: touch.id,
+      touch_type,
+      track_opens,
+      track_opens_strict: track_opens === true,
+      isEmail: touch_type === "email",
+      hasTouchId: !!touch.id
+    });
+    
+    // Return tracking metadata if email tracking is enabled (pixel will be injected client-side)
+    const condition1 = touch_type === "email";
+    const condition2 = track_opens === true;
+    const condition3 = !!touch.id;
+    const allConditions = condition1 && condition2 && condition3;
+    
+    console.log('🔍 [Backend] Condition evaluation:', {
+      condition1_isEmail: condition1,
+      condition2_trackOpensTrue: condition2,
+      condition3_hasTouchId: condition3,
+      allConditions: allConditions
+    });
+    
+    if (allConditions) {
+      const emailId = touch.id.toString();
+      const signature = signEmailId(emailId);
+      
+      console.log('🔍 [Backend] ✅ Returning touch WITH tracking metadata:', {
+        email_id: emailId,
+        signature_preview: signature.substring(0, 20) + '...'
+      });
+      
+      res.status(201).json({
+        ...touch,
+        tracking: {
+          email_id: emailId,
+          signature: signature
+        }
+      });
+    } else {
+      console.log('🔍 [Backend] ❌ Returning touch WITHOUT tracking:', {
+        reason: !condition1 ? "not email type" : !condition2 ? "track_opens !== true" : !condition3 ? "no touch.id" : "unknown"
+      });
+      res.status(201).json(touch);
+    }
   } catch (err) {
     console.error('Error inserting touch:', err);
     res.status(500).send('Failed to log touch');
