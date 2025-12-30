@@ -9,6 +9,12 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Underline from "@tiptap/extension-underline"
@@ -27,6 +33,8 @@ import {
   AlignRight,
   Indent,
   Outdent,
+  Eye,
+  MousePointerClick,
 } from "lucide-react"
 import { Extension } from "@tiptap/core"
 import { logTouch } from "../../api"
@@ -67,6 +75,8 @@ export default function EmailModal({
 }) {
   const subjectRef = useRef(null)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [trackOpens, setTrackOpens] = useState(true) // Default: ON
+  const [trackClicks, setTrackClicks] = useState(false) // Default: OFF
 
   const editor = useEditor({
     extensions: [
@@ -88,11 +98,13 @@ export default function EmailModal({
     return !html || html === "<p></p>" || html === "<p><br></p>"
   }
 
-  // 🧹 Reset editor + subject when modal closes
+  // 🧹 Reset editor + subject + tracking toggles when modal closes
   useEffect(() => {
     if (!open && editor) {
       editor.commands.setContent("")
       if (subjectRef.current) subjectRef.current.value = ""
+      setTrackOpens(true) // Reset to defaults
+      setTrackClicks(false)
     }
   }, [open, editor])
 
@@ -206,7 +218,8 @@ export default function EmailModal({
             <Input ref={subjectRef} placeholder="Subject" className="w-full" />
 
             {/* Toolbar */}
-            <div className="flex items-center flex-wrap space-x-1 border rounded-md p-1 bg-gray-50">
+            <TooltipProvider>
+              <div className="flex items-center flex-wrap space-x-1 border rounded-md p-1 bg-gray-50">
               <Button
                 size="sm"
                 variant="ghost"
@@ -290,6 +303,43 @@ export default function EmailModal({
                 <Outdent size={16} />
               </Button>
 
+              {/* Tracking Controls */}
+              <div className="ml-2 border-l border-gray-300 pl-1 flex items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setTrackOpens(!trackOpens)}
+                      className={trackOpens ? "bg-gray-200" : ""}
+                    >
+                      <Eye size={16} className={trackOpens ? "text-blue-600" : "text-gray-500"} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Track opens (adds invisible tracking pixel)</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setTrackClicks(!trackClicks)}
+                      className={trackClicks ? "bg-gray-200" : ""}
+                    >
+                      <MousePointerClick
+                        size={16}
+                        className={trackClicks ? "text-blue-600" : "text-gray-500"}
+                      />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Track clicks (wraps links for click tracking)</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+
               {/* Font size */}
               <select
                 className="ml-2 text-sm border rounded p-1 bg-white"
@@ -335,7 +385,8 @@ export default function EmailModal({
                   />
                 </div>
               </div>
-            </div>
+              </div>
+            </TooltipProvider>
 
             {/* Editor */}
             <div className="border rounded-md bg-white h-[250px] overflow-y-auto p-2">
