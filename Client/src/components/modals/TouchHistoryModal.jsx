@@ -8,7 +8,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Reply, Trash2, Mail, Phone, Linkedin } from "lucide-react"
+import { Reply, Trash2, Mail, Phone, Linkedin, Eye, MousePointerClick, Clock } from "lucide-react"
 
 // Helper to strip HTML tags for a preview
 function stripHtml(html) {
@@ -171,6 +171,8 @@ export default function TouchHistoryModal({ open, onClose, contact, onReply, onE
     const plainText = hasBody ? stripHtml(touch.body) : ""
     const isLong = plainText.length > 260
     const isExpanded = expandedTouchId === touch.id
+    const isEmailTouch = touch.touch_type === "email"
+    const showEmailActivitySection = true // Show email activity section
 
     return (
       <div
@@ -178,10 +180,31 @@ export default function TouchHistoryModal({ open, onClose, contact, onReply, onE
         className="rounded-lg border p-3 shadow-sm bg-white w-full overflow-hidden break-words"
       >
         {/* HEADER + ACTIONS */}
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-xs font-medium text-gray-600">
-            {formatDateWithOrdinal(touch.touched_at)}
-          </span>
+        <div className="flex justify-between items-start mb-2">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-gray-600">
+              {formatDateWithOrdinal(touch.touched_at)}
+            </span>
+            {/* EMAIL ACTIVITY METADATA */}
+            {isEmailTouch && showEmailActivitySection && (
+              <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                <div className="flex items-center gap-0.5">
+                  <Eye size={11} />
+                  <span>—</span>
+                </div>
+                <span className="text-gray-300">·</span>
+                <div className="flex items-center gap-0.5">
+                  <MousePointerClick size={11} />
+                  <span>—</span>
+                </div>
+                <span className="text-gray-300">·</span>
+                <div className="flex items-center gap-0.5">
+                  <Clock size={11} />
+                  <span>—</span>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="flex items-center gap-3">
             {touch.touch_type === "email" && (
