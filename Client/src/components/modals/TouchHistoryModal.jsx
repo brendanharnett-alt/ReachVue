@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import {
   Dialog,
   DialogContent,
@@ -54,6 +54,20 @@ function formatDateWithOrdinal(dateString) {
   return `${month} ${day}${getOrdinal(day)}, ${year} · ${hours}`
 }
 
+// Format short date/time for last activity: "Nov 19, 6:23 PM"
+function formatShortDateTime(dateString) {
+  if (!dateString) return null
+  const date = new Date(dateString)
+  const month = date.toLocaleString("en-US", { month: "short" })
+  const day = date.getDate()
+  const time = date.toLocaleString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+  return `${month} ${day}, ${time}`
+}
+
 // 🟦 Helper to build Outlook-style quoted reply body
 function buildReplyBody(touch) {
   const previousBody = touch.body || ""
@@ -93,6 +107,7 @@ export default function TouchHistoryModal({ open, onClose, contact, onReply, onE
   const [expandedTouchId, setExpandedTouchId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [emailActivity, setEmailActivity] = useState({}) // Map of email_id -> { open_count, click_count, last_activity_at }
 
   const fetchTouches = async (offsetOverride = offset) => {
     if (!open || !contact) return
@@ -117,6 +132,45 @@ export default function TouchHistoryModal({ open, onClose, contact, onReply, onE
     }
   }
 
+  // Batch fetch email activity for all email touches
+  const fetchEmailActivity = useCallback(async (touchesToFetch) => {
+    const emailTouches = touchesToFetch.filter((t) => t.touch_type === "email")
+    if (emailTouches.length === 0) {
+      setEmailActivity({})
+      return
+    }
+
+    const emailIds = emailTouches.map((t) => t.id)
+    try {
+      const res = await fetch("http://localhost:3000/api/email/activity-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailIds }),
+      })
+
+      if (!res.ok) {
+        console.warn("Failed to fetch email activity, using empty data")
+        setEmailActivity({})
+        return
+      }
+
+      const activityData = await res.json()
+      // Convert array to map for easy lookup
+      const activityMap = {}
+      activityData.forEach((item) => {
+        activityMap[item.email_id] = {
+          open_count: item.open_count || 0,
+          click_count: item.click_count || 0,
+          last_activity_at: item.last_activity_at || null,
+        }
+      })
+      setEmailActivity(activityMap)
+    } catch (err) {
+      console.error("Error fetching email activity:", err)
+      setEmailActivity({})
+    }
+  }, [])
+
   useEffect(() => {
     if (!open || !contact) return
     setOffset(0)
@@ -126,6 +180,15 @@ export default function TouchHistoryModal({ open, onClose, contact, onReply, onE
   useEffect(() => {
     fetchTouches()
   }, [open, contact, offset, limit])
+
+  // Fetch email activity when touches change
+  useEffect(() => {
+    if (touches.length > 0) {
+      fetchEmailActivity(touches)
+    } else {
+      setEmailActivity({})
+    }
+  }, [touches, fetchEmailActivity])
 
   const handleLoadOlder = () => {
     if (!hasOlder || loading) return
@@ -174,6 +237,12 @@ export default function TouchHistoryModal({ open, onClose, contact, onReply, onE
     const isEmailTouch = touch.touch_type === "email"
     const showEmailActivitySection = true // Show email activity section
 
+    // Get activity data for this email touch
+    const activity = isEmailTouch ? emailActivity[touch.id] : null
+    const openCount = activity?.open_count ?? null
+    const clickCount = activity?.click_count ?? null
+    const lastActivity = activity?.last_activity_at ? formatShortDateTime(activity.last_activity_at) : null
+
     return (
       <div
         key={touch.id}
@@ -190,17 +259,17 @@ export default function TouchHistoryModal({ open, onClose, contact, onReply, onE
               <div className="flex items-center gap-2 text-[10px] text-gray-400">
                 <div className="flex items-center gap-0.5">
                   <Eye size={11} />
-                  <span>—</span>
+                  <span>{openCount !== null ? openCount : "—"}</span>
                 </div>
                 <span className="text-gray-300">·</span>
                 <div className="flex items-center gap-0.5">
                   <MousePointerClick size={11} />
-                  <span>—</span>
+                  <span>{clickCount !== null ? clickCount : "—"}</span>
                 </div>
                 <span className="text-gray-300">·</span>
                 <div className="flex items-center gap-0.5">
                   <Clock size={11} />
-                  <span>—</span>
+                  <span>{lastActivity || "—"}</span>
                 </div>
               </div>
             )}
