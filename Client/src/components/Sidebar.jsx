@@ -7,7 +7,7 @@ const navItems = [
   { label: "Contacts", icon: <User size={18} />, href: "/" },
   { label: "Cadence", icon: <MailCheck size={18} />, href: "#" },
   { label: "Templates", icon: <FileText size={18} />, href: "/templates" },
-  { label: "Settings", icon: <Settings size={18} />, href: "#" },
+  { label: "Settings", icon: <Settings size={18} />, href: "/settings" },
 ];
 
 export default function Sidebar() {
