@@ -9,6 +9,7 @@ const nodemailer = require('nodemailer');
 const crypto = require("crypto");
 
 const TRACKING_SIGNING_SECRET = process.env.TRACKING_SIGNING_SECRET;
+const CURRENT_USER_ID ='b3228327-bf68-45d9-a0e1-61736130b1ca';
 
 function signEmailId(emailId) {
   return crypto
@@ -789,5 +790,73 @@ app.post("/api/email/sign-link", async (req, res) => {
     res.status(500).json({ error: "Failed to sign link" });
   }
 });
+
+// Endpoint for Email Signature Tracking
+// First endpoing is retrieving the email settings
+
+
+app.get('/api/user/settings/email', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT
+        email_client,
+        email_signature_html,
+        auto_signature
+      FROM users
+      WHERE id = $1
+      `,
+      [CURRENT_USER_ID]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error loading email settings:', err);
+    res.status(500).json({ error: 'Failed to load email settings' });
+  }
+});
+
+app.put('/api/user/settings/email', async (req, res) => {
+  try {
+    const {
+      email_client,
+      email_signature_html,
+      auto_signature
+    } = req.body;
+
+    // Optional light validation (keep it simple)
+    if (!email_client) {
+      return res.status(400).json({ error: 'email_client is required' });
+    }
+
+    await pool.query(
+      `
+      UPDATE users
+      SET
+        email_client = $1,
+        email_signature_html = $2,
+        auto_signature = $3
+      WHERE id = $4
+      `,
+      [
+        email_client,
+        email_signature_html,
+        auto_signature,
+        CURRENT_USER_ID
+      ]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error saving email settings:', err);
+    res.status(500).json({ error: 'Failed to save email settings' });
+  }
+});
+
+
 
 
