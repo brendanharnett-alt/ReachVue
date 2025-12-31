@@ -90,6 +90,7 @@ export async function logTouch({
   metadata = {},
   cadence_id = null,
   track_opens = false,
+  track_clicks = false,
 }) {
   try {
     const touchPayload = {
@@ -101,6 +102,7 @@ export async function logTouch({
       metadata: JSON.stringify(metadata),
       cadence_id,
       track_opens,
+      track_clicks,
     }
 
     const res = await fetch(`${BASE_URL}/touches`, {
@@ -113,6 +115,27 @@ export async function logTouch({
     return await res.json()
   } catch (err) {
     console.error(`Log ${touch_type} touch error:`, err)
+    throw err
+  }
+}
+
+export async function signLink(email_id, original_url, link_index) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/email/sign-link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email_id,
+        original_url,
+        link_index,
+      }),
+    })
+
+    if (!res.ok) throw new Error("Failed to sign link")
+    const data = await res.json()
+    return data.signature
+  } catch (err) {
+    console.error("Sign link error:", err)
     throw err
   }
 }

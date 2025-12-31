@@ -377,22 +377,20 @@ app.post('/send-email', async (req, res) => {
 // ----------------------
 
 app.post('/touches', async (req, res) => {
-  const { contact_id, touched_at, touch_type, subject, body, metadata, cadence_id, thread_id, parent_touch_id, track_opens } = req.body;
+  const { contact_id, touched_at, touch_type, subject, body, metadata, cadence_id, thread_id, parent_touch_id, track_opens, track_clicks } = req.body;
 
-  console.log('🔍 [Backend] POST /touches - Received request:', {
-    touch_type,
-    track_opens,
-    track_opens_type: typeof track_opens,
-    track_opens_value: track_opens,
-    has_contact_id: !!contact_id
-  });
+  // #region agent log
+  const fs = require('fs');
+  const logPath = 'c:\\ReachVue\\.cursor\\debug.log';
+  const logEntry = JSON.stringify({location:'Server/index.js:379',message:'POST /touches entry',data:{touch_type,track_opens,track_clicks,hasContactId:!!contact_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'}) + '\n';
+  fs.appendFileSync(logPath, logEntry);
+  // #endregion
 
   if (!contact_id || !touch_type) {
     return res.status(400).send("Missing required fields: contact_id and touch_type");
   }
 
   try {
-    // Insert touch with clean body (no tracking pixel)
     const result = await pool.query(
       `
       INSERT INTO touches
@@ -414,49 +412,44 @@ app.post('/touches', async (req, res) => {
     );
 
     const touch = result.rows[0];
-    
-    console.log('🔍 [Backend] Touch created:', {
-      touch_id: touch.id,
-      touch_type,
-      track_opens,
-      track_opens_strict: track_opens === true,
-      isEmail: touch_type === "email",
-      hasTouchId: !!touch.id
-    });
-    
-    // Return tracking metadata if email tracking is enabled (pixel will be injected client-side)
-    const condition1 = touch_type === "email";
-    const condition2 = track_opens === true;
-    const condition3 = !!touch.id;
-    const allConditions = condition1 && condition2 && condition3;
-    
-    console.log('🔍 [Backend] Condition evaluation:', {
-      condition1_isEmail: condition1,
-      condition2_trackOpensTrue: condition2,
-      condition3_hasTouchId: condition3,
-      allConditions: allConditions
-    });
-    
-    if (allConditions) {
+
+    // #region agent log
+    const logEntry2 = JSON.stringify({location:'Server/index.js:407',message:'Touch created, evaluating tracking',data:{touch_id:touch.id,touch_type,track_opens,track_clicks,isEmail:touch_type==='email',hasTouchId:!!touch.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'}) + '\n';
+    fs.appendFileSync(logPath, logEntry2);
+    // #endregion
+
+    // Return tracking metadata if this is an email and tracking is enabled
+    const isEmail = touch_type === "email";
+    const hasTrackOpens = track_opens === true;
+    const hasTrackClicks = track_clicks === true;
+    const hasTouchId = !!touch.id;
+
+    if (isEmail && hasTouchId && (hasTrackOpens || hasTrackClicks)) {
       const emailId = touch.id.toString();
-      const signature = signEmailId(emailId);
-      
-      console.log('🔍 [Backend] ✅ Returning touch WITH tracking metadata:', {
-        email_id: emailId,
-        signature_preview: signature.substring(0, 20) + '...'
-      });
-      
+      const tracking = {
+        email_id: emailId
+      };
+
+      // Add signature for open tracking
+      if (hasTrackOpens) {
+        tracking.signature = signEmailId(emailId);
+      }
+
+      // #region agent log
+      const logEntry3 = JSON.stringify({location:'Server/index.js:420',message:'Returning touch with tracking metadata',data:{email_id:emailId,hasOpens:hasTrackOpens,hasClicks:hasTrackClicks,hasSignature:!!tracking.signature},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'}) + '\n';
+      fs.appendFileSync(logPath, logEntry3);
+      // #endregion
+
       res.status(201).json({
         ...touch,
-        tracking: {
-          email_id: emailId,
-          signature: signature
-        }
+        email_id: emailId, // Also include at top level for click tracking
+        tracking
       });
     } else {
-      console.log('🔍 [Backend] ❌ Returning touch WITHOUT tracking:', {
-        reason: !condition1 ? "not email type" : !condition2 ? "track_opens !== true" : !condition3 ? "no touch.id" : "unknown"
-      });
+      // #region agent log
+      const logEntry4 = JSON.stringify({location:'Server/index.js:430',message:'Returning touch without tracking',data:{reason:!isEmail?'not email':!hasTouchId?'no touch id':(!hasTrackOpens && !hasTrackClicks)?'no tracking enabled':'unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'}) + '\n';
+      fs.appendFileSync(logPath, logEntry4);
+      // #endregion
       res.status(201).json(touch);
     }
   } catch (err) {
@@ -773,6 +766,27 @@ app.post("/api/email/activity-summary", async (req, res) => {
   } catch (err) {
     console.error("batch activity summary error", err);
     res.status(500).json({ error: "Failed to load batch activity summary" });
+  }
+});
+
+// Endpoint to sign link data for click tracking
+// Signature is calculated by passing "emailId:originalUrl:linkIndex" to signEmailId
+app.post("/api/email/sign-link", async (req, res) => {
+  try {
+    const { email_id, original_url, link_index } = req.body;
+
+    if (!email_id || !original_url || link_index === undefined) {
+      return res.status(400).json({ error: "email_id, original_url, and link_index are required" });
+    }
+
+    // Format: "emailId:URL being replaced:link index"
+    const dataToSign = `${email_id}:${original_url}:${link_index}`;
+    const signature = signEmailId(dataToSign);
+
+    res.json({ signature });
+  } catch (err) {
+    console.error("sign link error", err);
+    res.status(500).json({ error: "Failed to sign link" });
   }
 });
 

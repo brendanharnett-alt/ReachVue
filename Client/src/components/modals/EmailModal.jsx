@@ -37,7 +37,7 @@ import {
   MousePointerClick,
 } from "lucide-react"
 import { Extension } from "@tiptap/core"
-import { logTouch } from "../../api"
+import { logTouch, signLink } from "../../api"
 import TemplatePickerModal from "@/components/modals/TemplatePickerModal"
 
 // 🔹 Font size extension
@@ -122,6 +122,43 @@ export default function EmailModal({
 
   if (!contact) return null
 
+  // Helper function to replace links with tracking URLs
+  const replaceLinksWithTracking = async (html, emailId) => {
+    if (!html) return html
+
+    // Create a temporary DOM element to parse HTML
+    const tempDiv = document.createElement("div")
+    tempDiv.innerHTML = html
+
+    // Find all anchor tags with href attributes
+    const links = tempDiv.querySelectorAll("a[href]")
+    if (links.length === 0) return html
+
+    console.log(`📧 [EmailModal] Found ${links.length} links to replace`)
+
+    // Replace each link with tracking URL
+    for (let i = 0; i < links.length; i++) {
+      const link = links[i]
+      const originalUrl = link.getAttribute("href")
+      if (!originalUrl || originalUrl.startsWith("https://t.reachvue.com/")) {
+        continue // Skip if already a tracking link or no href
+      }
+
+      try {
+        const linkIndex = i + 1 // 1-indexed (1 to N)
+        const signature = await signLink(emailId, originalUrl, linkIndex)
+        const trackingUrl = `https://t.reachvue.com/c?e=${emailId}&u=${encodeURIComponent(originalUrl)}&li=${linkIndex}&s=${signature}`
+        link.setAttribute("href", trackingUrl)
+        console.log(`📧 [EmailModal] Replaced link ${linkIndex}: ${originalUrl.substring(0, 50)}...`)
+      } catch (err) {
+        console.error(`📧 [EmailModal] Failed to sign link ${i + 1}:`, err)
+        // Continue with other links even if one fails
+      }
+    }
+
+    return tempDiv.innerHTML
+  }
+
   const handleSend = async () => {
     const subject = subjectRef.current?.value || ""
     let bodyHtml = editor?.getHTML() || ""
@@ -129,16 +166,20 @@ export default function EmailModal({
 
     bodyHtml = bodyHtml.replace(/<p><\/p>/g, "<div>&nbsp;</div>")
 
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:162',message:'handleSend entry',data:{trackOpens,trackClicks,bodyLength:bodyHtml.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
     try {
       if (!window || typeof window.postMessage !== "function") {
         alert("⚠️ Unable to send email — messaging not available in this browser.")
         return
       }
 
-      // 🔹 Log touch first with clean body (no tracking pixel in database)
-      console.log("📧 [EmailModal] Starting send - trackOpens:", trackOpens, "type:", typeof trackOpens)
-      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:139',message:'Before logTouch call',data:{trackOpens,typeofTrackOpens:typeof trackOpens,bodyLength:bodyHtml.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      
+      // 🔹 Log touch first with clean body (no tracking links/pixel in database)
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:175',message:'Before logTouch call',data:{trackOpens,trackClicks,willPassTrackOpens:true,willPassTrackClicks:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       const touchResult = await logTouch({
         contact_id: contact.id,
         touch_type: "email",
@@ -146,33 +187,46 @@ export default function EmailModal({
         body: bodyHtml, // Clean body stored in DB
         metadata: { to: recipient },
         track_opens: trackOpens,
+        track_clicks: trackClicks,
       })
 
-      console.log("📧 [EmailModal] touchResult received:", touchResult)
-      console.log("📧 [EmailModal] touchResult.tracking:", touchResult?.tracking)
-      console.log("📧 [EmailModal] touchResult.id:", touchResult?.id)
-      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:147',message:'After logTouch call',data:{hasTracking:!!touchResult?.tracking,tracking:touchResult?.tracking,touchId:touchResult?.id,fullResult:JSON.stringify(touchResult).substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:183',message:'After logTouch call',data:{hasTouchResult:!!touchResult,hasEmailId:!!touchResult?.email_id,hasTracking:!!touchResult?.tracking,hasSignature:!!touchResult?.tracking?.signature,touchResultKeys:Object.keys(touchResult||{}),trackingKeys:touchResult?.tracking?Object.keys(touchResult.tracking):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
 
-      // 🔹 Inject tracking pixel into email body if tracking is enabled
+      // 🔹 Inject tracking pixel and replace links if tracking is enabled
       let emailBodyForOutlook = bodyHtml
-      console.log("📧 [EmailModal] Condition check - trackOpens:", trackOpens, "touchResult.tracking:", touchResult?.tracking, "will inject:", trackOpens && !!touchResult?.tracking)
-      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:150',message:'Pixel injection condition check',data:{trackOpens,hasTracking:!!touchResult?.tracking,willInject:trackOpens && !!touchResult?.tracking,conditionResult:trackOpens && touchResult?.tracking},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       
-      if (trackOpens && touchResult.tracking) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:190',message:'Before tracking injection',data:{trackOpens,trackClicks,hasEmailId:!!touchResult?.email_id,hasTracking:!!touchResult?.tracking,hasSignature:!!touchResult?.tracking?.signature,willInjectPixel:trackOpens && !!touchResult?.tracking?.signature,willReplaceLinks:trackClicks && !!touchResult?.email_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+
+      // Inject tracking pixel if opens tracking is enabled
+      if (trackOpens && touchResult?.tracking?.signature) {
         const { email_id, signature } = touchResult.tracking
         const trackingPixel = `<img src="https://t.reachvue.com/o?e=${email_id}&s=${signature}" width="1" height="1" style="display:none" />`
-        emailBodyForOutlook = bodyHtml + trackingPixel
-        console.log("📧 [EmailModal] ✅ Tracking pixel injected!")
-        console.log("📧 [EmailModal] Pixel:", trackingPixel)
-        console.log("📧 [EmailModal] Original body length:", bodyHtml.length, "Final body length:", emailBodyForOutlook.length)
-        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:153',message:'Tracking pixel injected successfully',data:{email_id,signatureLength:signature?.length,pixelLength:trackingPixel.length,bodyLength:bodyHtml.length,finalLength:emailBodyForOutlook.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      } else {
-        console.log("📧 [EmailModal] ❌ Tracking pixel NOT injected")
-        console.log("📧 [EmailModal] Reason - trackOpens:", trackOpens, "hasTracking:", !!touchResult?.tracking)
-        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:154',message:'Tracking pixel NOT injected',data:{reason:!trackOpens?'trackOpens is false':!touchResult?.tracking?'touchResult.tracking is missing':'unknown',trackOpens,hasTracking:!!touchResult?.tracking},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        emailBodyForOutlook = emailBodyForOutlook + trackingPixel
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:197',message:'Tracking pixel injected',data:{email_id,signatureLength:signature?.length,pixelLength:trackingPixel.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
       }
 
-      // 🔹 Send to Outlook extension with tracking pixel (if enabled)
+      // Replace links with tracking URLs if click tracking is enabled
+      if (trackClicks && touchResult?.email_id) {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:203',message:'Starting link replacement',data:{email_id:touchResult.email_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+        emailBodyForOutlook = await replaceLinksWithTracking(emailBodyForOutlook, touchResult.email_id)
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:206',message:'Link replacement completed',data:{finalBodyLength:emailBodyForOutlook.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+      }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:210',message:'Before sending to Outlook',data:{originalBodyLength:bodyHtml.length,finalBodyLength:emailBodyForOutlook.length,hasPixel:emailBodyForOutlook.includes('t.reachvue.com/o?'),hasTrackingLinks:emailBodyForOutlook.includes('t.reachvue.com/c?')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+
+      // 🔹 Send to Outlook extension with tracking pixel/links (if enabled)
       window.postMessage(
         {
           type: "open-outlook-and-paste",
