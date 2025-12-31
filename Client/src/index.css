@@ -97,3 +97,27 @@
   margin: 0.25rem 0;
 }
 /* end bulleted list */
+
+/* Signature editor specific styles */
+.signature-editor .ProseMirror {
+  min-height: 120px;
+  padding: 12px;
+}
+
+.signature-editor .ProseMirror p {
+  margin: 0.5em 0;
+}
+
+.signature-editor .ProseMirror p:first-child {
+  margin-top: 0;
+}
+
+.signature-editor .ProseMirror p:last-child {
+  margin-bottom: 0;
+}
+
+.signature-editor .ProseMirror:empty::before {
+  content: "Enter your email signature here...";
+  color: #9ca3af;
+  pointer-events: none;
+}

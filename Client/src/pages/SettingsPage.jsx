@@ -1,19 +1,101 @@
 // src/pages/SettingsPage.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Settings } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Settings, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Palette } from "lucide-react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import UnderlineExtension from "@tiptap/extension-underline";
+import { TextStyle } from "@tiptap/extension-text-style";
+import { Color } from "@tiptap/extension-color";
+import TextAlign from "@tiptap/extension-text-align";
+import { Extension } from "@tiptap/core";
+
+// Font size extension (same as EmailModal)
+const FontSize = Extension.create({
+  name: "fontSize",
+  addOptions() {
+    return { types: ["textStyle"] };
+  },
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: (el) => el.style.fontSize || null,
+            renderHTML: (attrs) => {
+              if (!attrs.fontSize) return {};
+              return { style: `font-size: ${attrs.fontSize}` };
+            },
+          },
+        },
+      },
+    ];
+  },
+});
 
 export default function SettingsPage() {
   const [emailClient, setEmailClient] = useState("outlook");
-  const [emailSignature, setEmailSignature] = useState("");
   const [autoAppendSignature, setAutoAppendSignature] = useState(true);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+
+  // Initialize Tiptap editor for signature
+  const signatureEditor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        blockquote: false,
+        codeBlock: false,
+        heading: false,
+        horizontalRule: false,
+      }),
+      UnderlineExtension,
+      TextStyle,
+      Color.configure({ types: ["textStyle"] }),
+      FontSize,
+      TextAlign.configure({ types: ["paragraph"] }),
+    ],
+    content: "",
+    editorProps: {
+      attributes: {
+        class: "prose prose-sm max-w-none focus:outline-none min-h-[120px] px-3 py-2 text-sm text-gray-900",
+      },
+    },
+  });
+
+  // Close color picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showColorPicker && !event.target.closest('.color-picker-container')) {
+        setShowColorPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showColorPicker]);
+
+  // Color swatches
+  const colorSwatches = [
+    "#000000", "#333333", "#666666", "#999999", "#CCCCCC",
+    "#FF0000", "#FF6600", "#FFCC00", "#00FF00", "#00CCFF",
+    "#0066FF", "#6600FF", "#FF00FF", "#FFFFFF",
+  ];
+
+  const fontSizes = ["10px", "12px", "14px", "16px", "18px", "20px"];
 
   const handleSave = () => {
     // TODO: Wire up to backend API
+    const signatureHtml = signatureEditor?.getHTML() || "";
     console.log("Settings saved:", {
       emailClient,
-      emailSignature,
+      emailSignature: signatureHtml,
       autoAppendSignature,
     });
     // For now, just show a success message
@@ -66,20 +148,160 @@ export default function SettingsPage() {
 
         {/* Email Signature Editor */}
         <div className="mb-6">
-          <label
-            htmlFor="emailSignature"
-            className="block text-sm font-medium text-gray-700 mb-2"
-          >
+          <label className="block text-sm font-medium text-gray-700 mb-2">
             Email Signature
           </label>
-          <textarea
-            id="emailSignature"
-            value={emailSignature}
-            onChange={(e) => setEmailSignature(e.target.value)}
-            placeholder="Enter your email signature here..."
-            rows={6}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-900 placeholder-gray-400 resize-y"
-          />
+          
+          {/* Rich Text Toolbar */}
+          <TooltipProvider>
+            <div className="flex items-center flex-wrap gap-1 border border-gray-300 rounded-t-md p-2 bg-gray-50 border-b-0">
+              {/* Text Formatting */}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => signatureEditor?.chain().focus().toggleBold().run()}
+                className={signatureEditor?.isActive("bold") ? "bg-gray-200" : ""}
+              >
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Bold size={16} />
+                  </TooltipTrigger>
+                  <TooltipContent>Bold</TooltipContent>
+                </Tooltip>
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => signatureEditor?.chain().focus().toggleItalic().run()}
+                className={signatureEditor?.isActive("italic") ? "bg-gray-200" : ""}
+              >
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Italic size={16} />
+                  </TooltipTrigger>
+                  <TooltipContent>Italic</TooltipContent>
+                </Tooltip>
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => signatureEditor?.chain().focus().toggleUnderline().run()}
+                className={signatureEditor?.isActive("underline") ? "bg-gray-200" : ""}
+              >
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Underline size={16} />
+                  </TooltipTrigger>
+                  <TooltipContent>Underline</TooltipContent>
+                </Tooltip>
+              </Button>
+
+              {/* Divider */}
+              <div className="w-px h-6 bg-gray-300 mx-1" />
+
+              {/* Text Alignment */}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => signatureEditor?.chain().focus().setTextAlign("left").run()}
+                className={signatureEditor?.isActive({ textAlign: "left" }) ? "bg-gray-200" : ""}
+              >
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <AlignLeft size={16} />
+                  </TooltipTrigger>
+                  <TooltipContent>Align Left</TooltipContent>
+                </Tooltip>
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => signatureEditor?.chain().focus().setTextAlign("center").run()}
+                className={signatureEditor?.isActive({ textAlign: "center" }) ? "bg-gray-200" : ""}
+              >
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <AlignCenter size={16} />
+                  </TooltipTrigger>
+                  <TooltipContent>Align Center</TooltipContent>
+                </Tooltip>
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => signatureEditor?.chain().focus().setTextAlign("right").run()}
+                className={signatureEditor?.isActive({ textAlign: "right" }) ? "bg-gray-200" : ""}
+              >
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <AlignRight size={16} />
+                  </TooltipTrigger>
+                  <TooltipContent>Align Right</TooltipContent>
+                </Tooltip>
+              </Button>
+
+              {/* Divider */}
+              <div className="w-px h-6 bg-gray-300 mx-1" />
+
+              {/* Font Color */}
+              <div className="relative color-picker-container">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowColorPicker(!showColorPicker)}
+                  className={signatureEditor?.isActive("textStyle") ? "bg-gray-200" : ""}
+                >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Palette size={16} />
+                    </TooltipTrigger>
+                    <TooltipContent>Text Color</TooltipContent>
+                  </Tooltip>
+                </Button>
+                {showColorPicker && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg p-2 z-10 color-picker-container">
+                    <div className="grid grid-cols-7 gap-1 w-56">
+                      {colorSwatches.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => {
+                            signatureEditor?.chain().focus().setColor(color).run();
+                            setShowColorPicker(false);
+                          }}
+                          className="w-6 h-6 rounded border border-gray-300 hover:scale-110 transition-transform"
+                          style={{ backgroundColor: color }}
+                          title={color}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Font Size */}
+              <select
+                onChange={(e) => {
+                  const size = e.target.value;
+                  signatureEditor?.chain().focus().setFontSize(size).run();
+                }}
+                className="h-8 px-2 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                defaultValue="14px"
+              >
+                {fontSizes.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </TooltipProvider>
+
+          {/* Editor Content */}
+          <div className="signature-editor border border-gray-300 rounded-b-md bg-white min-h-[120px] focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+            <EditorContent editor={signatureEditor} />
+          </div>
+
           <p className="mt-2 text-xs text-gray-500">
             This signature will be appended to every email you send.
           </p>
