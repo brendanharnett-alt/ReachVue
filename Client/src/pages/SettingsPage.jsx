@@ -42,10 +42,15 @@ const FontSize = Extension.create({
   },
 });
 
+const BASE_URL = "http://localhost:3000";
+
 export default function SettingsPage() {
   const [emailClient, setEmailClient] = useState("outlook");
   const [autoAppendSignature, setAutoAppendSignature] = useState(true);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [fetchedSignature, setFetchedSignature] = useState(null);
 
   // Initialize Tiptap editor for signature
   const signatureEditor = useEditor({
@@ -70,6 +75,44 @@ export default function SettingsPage() {
     },
   });
 
+  // Fetch email settings on component mount
+  useEffect(() => {
+    const fetchEmailSettings = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch(`${BASE_URL}/api/user/settings/email`);
+        if (!res.ok) {
+          throw new Error("Failed to fetch email settings");
+        }
+        const data = await res.json();
+        
+        // Store signature HTML to populate editor when ready
+        if (data.email_signature_html) {
+          setFetchedSignature(data.email_signature_html);
+        }
+        
+        // Populate auto-append checkbox
+        if (data.auto_signature !== undefined) {
+          setAutoAppendSignature(data.auto_signature);
+        }
+      } catch (err) {
+        console.error("Error fetching email settings:", err);
+        // Keep defaults if fetch fails
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEmailSettings();
+  }, []);
+
+  // Populate editor when both editor and fetched data are ready
+  useEffect(() => {
+    if (signatureEditor && fetchedSignature !== null && !loading) {
+      signatureEditor.commands.setContent(fetchedSignature || "");
+    }
+  }, [signatureEditor, fetchedSignature, loading]);
+
   // Close color picker when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -90,16 +133,87 @@ export default function SettingsPage() {
 
   const fontSizes = ["10px", "12px", "14px", "16px", "18px", "20px"];
 
-  const handleSave = () => {
-    // TODO: Wire up to backend API
-    const signatureHtml = signatureEditor?.getHTML() || "";
-    console.log("Settings saved:", {
-      emailClient,
-      emailSignature: signatureHtml,
-      autoAppendSignature,
-    });
-    // For now, just show a success message
-    alert("Settings saved! (Backend integration coming soon)");
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      const signatureHtml = signatureEditor?.getHTML() || "";
+      const url = `${BASE_URL}/api/user/settings/email`;
+      const payload = {
+        email_client: emailClient, // Keep current value (outlook)
+        email_signature_html: signatureHtml,
+        auto_signature: autoAppendSignature,
+      };
+
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SettingsPage.jsx:136',message:'handleSave entry',data:{url,payload,emailClient,signatureLength:signatureHtml.length,autoAppendSignature},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+
+      console.log("Saving settings to:", url);
+      console.log("Payload:", payload);
+
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SettingsPage.jsx:155',message:'After fetch',data:{status:res.status,statusText:res.statusText,ok:res.ok,contentType:res.headers.get('content-type'),url:res.url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+
+      console.log("Response status:", res.status, res.statusText);
+      console.log("Response URL:", res.url);
+      console.log("Response headers:", Object.fromEntries(res.headers.entries()));
+
+      // Check content type before parsing
+      const contentType = res.headers.get("content-type");
+      let errorMessage = "Failed to save settings";
+
+      if (!res.ok) {
+        // Try to parse as JSON, but handle HTML responses
+        if (contentType && contentType.includes("application/json")) {
+          try {
+            const errorData = await res.json();
+            errorMessage = errorData.error || `Server error (${res.status})`;
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SettingsPage.jsx:170',message:'JSON error response',data:{errorData,status:res.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+          } catch (parseErr) {
+            errorMessage = `Server error (${res.status})`;
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SettingsPage.jsx:175',message:'JSON parse error',data:{parseErr:parseErr.message,status:res.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+          }
+        } else {
+          // Response is HTML (error page), get status text
+          errorMessage = `Server error: ${res.status} ${res.statusText || "Unknown error"}`;
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SettingsPage.jsx:181',message:'HTML error response',data:{status:res.status,statusText:res.statusText,contentType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+        }
+        throw new Error(errorMessage);
+      }
+
+      // Success - try to parse JSON response
+      if (contentType && contentType.includes("application/json")) {
+        const result = await res.json();
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SettingsPage.jsx:190',message:'Success response',data:{result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+      }
+
+      alert("Settings saved successfully!");
+    } catch (err) {
+      console.error("Error saving email settings:", err);
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SettingsPage.jsx:197',message:'Catch block',data:{errorMessage:err.message,errorStack:err.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      alert("Failed to save settings: " + err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -322,8 +436,8 @@ export default function SettingsPage() {
 
         {/* Save Button */}
         <div className="flex justify-start">
-          <Button onClick={handleSave} className="px-6">
-            Save
+          <Button onClick={handleSave} className="px-6" disabled={loading || saving}>
+            {saving ? "Saving..." : "Save"}
           </Button>
         </div>
       </div>
