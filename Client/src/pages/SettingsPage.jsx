@@ -47,7 +47,7 @@ const BASE_URL = "http://localhost:3000";
 export default function SettingsPage({ emailSettings, setEmailSettings }) {
   // Initialize local state from props
   const [emailClient, setEmailClient] = useState(
-    emailSettings?.email_client || "outlook"
+    emailSettings?.email_client || "outlook_web"
   );
   const [autoAppendSignature, setAutoAppendSignature] = useState(
     emailSettings?.auto_signature !== undefined
@@ -83,7 +83,7 @@ export default function SettingsPage({ emailSettings, setEmailSettings }) {
   // Update local state when emailSettings prop changes
   useEffect(() => {
     if (emailSettings) {
-      setEmailClient(emailSettings.email_client || "outlook");
+      setEmailClient(emailSettings.email_client || "outlook_web");
       setAutoAppendSignature(
         emailSettings.auto_signature !== undefined
           ? emailSettings.auto_signature
@@ -91,7 +91,8 @@ export default function SettingsPage({ emailSettings, setEmailSettings }) {
       );
       if (signatureEditor) {
         signatureEditor.commands.setContent(
-          emailSettings.email_signature_html || ""
+          emailSettings.email_signature_html || "",
+          false
         );
       }
     }
@@ -198,8 +199,8 @@ export default function SettingsPage({ emailSettings, setEmailSettings }) {
               <input
                 type="radio"
                 name="emailClient"
-                value="outlook"
-                checked={emailClient === "outlook"}
+                value="outlook_web"
+                checked={emailClient === "outlook_web"}
                 onChange={(e) => setEmailClient(e.target.value)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
               />

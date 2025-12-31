@@ -23,7 +23,7 @@ export default function App() {
           console.error("Failed to fetch email settings:", res.status);
           // Set defaults if fetch fails
           setEmailSettings({
-            email_client: "outlook",
+            email_client: "outlook_web",
             email_signature_html: "",
             auto_signature: true,
           });
