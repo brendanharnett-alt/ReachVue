@@ -72,11 +72,43 @@ export default function EmailModal({
   onSend,
   initialSubject = "",
   initialBody = "",
+  emailSettings = null,
 }) {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:68',message:'EmailModal component render',data:{hasEmailSettings:!!emailSettings,emailSettingsType:typeof emailSettings,autoSignature:emailSettings?.auto_signature,hasSignatureHtml:!!emailSettings?.email_signature_html,signatureHtmlLength:emailSettings?.email_signature_html?.length,open,hasContact:!!contact},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+  
   const subjectRef = useRef(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [trackOpens, setTrackOpens] = useState(true) // Default: ON
   const [trackClicks, setTrackClicks] = useState(false) // Default: OFF
+  const [localEmailSettings, setLocalEmailSettings] = useState(emailSettings) // Use prop if provided, otherwise fetch
+  
+  // Fetch email settings if not provided as prop
+  useEffect(() => {
+    if (!emailSettings) {
+      const fetchSettings = async () => {
+        try {
+          const res = await fetch("http://localhost:3000/api/user/settings/email")
+          if (res.ok) {
+            const data = await res.json()
+            setLocalEmailSettings(data)
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:90',message:'Fetched email settings',data:{hasAutoSignature:!!data?.auto_signature,hasSignatureHtml:!!data?.email_signature_html,signatureHtmlLength:data?.email_signature_html?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+            // #endregion
+          }
+        } catch (err) {
+          console.error("Failed to fetch email settings:", err)
+        }
+      }
+      fetchSettings()
+    } else {
+      setLocalEmailSettings(emailSettings)
+    }
+  }, [emailSettings])
+  
+  // Use localEmailSettings (from prop or fetch) instead of emailSettings prop
+  const effectiveEmailSettings = localEmailSettings || emailSettings
 
   const editor = useEditor({
     extensions: [
@@ -109,16 +141,65 @@ export default function EmailModal({
   }, [open, editor])
 
   // 📨 Prefill subject + body for replies (robust + deterministic)
+  // Also append signature if auto_signature is enabled
   useEffect(() => {
-    if (!open || !editor) return
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:114',message:'useEffect entry for content initialization',data:{open,hasEditor:!!editor,hasEmailSettings:!!effectiveEmailSettings,autoSignature:effectiveEmailSettings?.auto_signature,hasSignatureHtml:!!effectiveEmailSettings?.email_signature_html,initialBodyLength:initialBody?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+    
+    if (!open || !editor) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:118',message:'useEffect early return',data:{reason:!open?'modal not open':'editor not ready'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      return
+    }
     // Wait until next React paint so refs exist
     requestAnimationFrame(() => {
       if (subjectRef.current) {
         subjectRef.current.value = initialSubject || ""
       }
-      editor.commands.setContent(initialBody || "")
+      
+      // Start with initial body (blank, reply content, or template content)
+      let content = initialBody || ""
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:130',message:'Before signature check',data:{contentLength:content.length,hasEmailSettings:!!effectiveEmailSettings,autoSignature:effectiveEmailSettings?.auto_signature,hasSignatureHtml:!!effectiveEmailSettings?.email_signature_html,signatureHtmlPreview:effectiveEmailSettings?.email_signature_html?.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
+      // Append signature if auto_signature is enabled and signature exists
+      if (effectiveEmailSettings?.auto_signature && effectiveEmailSettings?.email_signature_html) {
+        const signatureHtml = effectiveEmailSettings.email_signature_html.trim()
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:135',message:'Signature condition met',data:{signatureHtmlLength:signatureHtml.length,contentBeforeAppend:content.substring(0,50),willAppend:!!signatureHtml},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+        if (signatureHtml) {
+          // If content is empty, just use signature
+          // Otherwise, append signature with a line break
+          if (!content || content === "<p></p>" || content === "<p><br></p>") {
+            content = signatureHtml
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:140',message:'Content was empty, using signature only',data:{finalContentLength:content.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+          } else {
+            // Append signature after existing content
+            content = content + signatureHtml
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:144',message:'Appended signature to existing content',data:{finalContentLength:content.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+          }
+        }
+      } else {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:149',message:'Signature condition NOT met',data:{hasEmailSettings:!!effectiveEmailSettings,autoSignature:effectiveEmailSettings?.auto_signature,hasSignatureHtml:!!effectiveEmailSettings?.email_signature_html},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+      }
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:153',message:'Setting editor content',data:{finalContentLength:content.length,contentPreview:content.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      editor.commands.setContent(content, false)
     })
-  }, [open, editor, initialSubject, initialBody])
+  }, [open, editor, initialSubject, initialBody, effectiveEmailSettings])
 
   if (!contact) return null
 
