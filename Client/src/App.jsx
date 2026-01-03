@@ -5,6 +5,8 @@ import Sidebar from "./components/Sidebar";
 import ContactsPage from "./pages/ContactsPage";
 import TemplatesPage from "./pages/TemplatesPage";
 import SettingsPage from "./pages/SettingsPage";
+import CadencesPage from "./pages/CadencesPage";
+import CadenceDetailPage from "./pages/CadenceDetailPage";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -32,7 +34,7 @@ export default function App() {
         console.error("Error fetching email settings:", err);
         // Set defaults on error
         setEmailSettings({
-          email_client: "outlook",
+          email_client: "outlook_web",
           email_signature_html: "",
           auto_signature: true,
         });
@@ -62,6 +64,9 @@ export default function App() {
                 />
               }
             />
+            {/* Cadences page route */}
+            <Route path="/cadences" element={<CadencesPage />} />
+            <Route path="/cadences/:cadenceId" element={<CadenceDetailPage />} />
           </Routes>
         </div>
       </div>

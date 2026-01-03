@@ -5,7 +5,7 @@ import { Link, useLocation } from "react-router-dom";
 
 const navItems = [
   { label: "Contacts", icon: <User size={18} />, href: "/" },
-  { label: "Cadence", icon: <MailCheck size={18} />, href: "#" },
+  { label: "Cadence", icon: <MailCheck size={18} />, href: "/cadences" },
   { label: "Templates", icon: <FileText size={18} />, href: "/templates" },
   { label: "Settings", icon: <Settings size={18} />, href: "/settings" },
 ];
@@ -28,7 +28,11 @@ export default function Sidebar() {
         {/* Navigation */}
         <nav className="flex flex-col gap-2 w-full">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.href;
+            // Handle cadence detail pages - highlight if path starts with /cadences
+            const isActive =
+              item.href === "/cadences"
+                ? location.pathname.startsWith("/cadences")
+                : location.pathname === item.href;
             return (
               <Link
                 key={item.label}
