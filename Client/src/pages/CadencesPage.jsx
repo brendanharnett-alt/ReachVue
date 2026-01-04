@@ -1,5 +1,5 @@
 // src/pages/CadencesPage.jsx
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MailCheck, Eye, Edit, Play, MoreVertical, History, SkipForward, Clock } from "lucide-react";
+import { Plus, MailCheck, Eye, Edit, Play, MoreVertical, History, SkipForward, Clock, ChevronRight, ChevronDown } from "lucide-react";
 
 // Mock cadence data
 const mockCadences = [
@@ -163,7 +163,29 @@ const generateToDoItems = () => {
 export default function CadencesPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("todo");
+  const [groupBy, setGroupBy] = useState("none");
+  const [expandedGroups, setExpandedGroups] = useState({});
   const toDoItems = generateToDoItems();
+
+  const toggleGroupExpand = (group) =>
+    setExpandedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
+
+  // Group items by campaign when grouping is enabled
+  const groupedData = useMemo(() => {
+    if (groupBy === "none") return { All: toDoItems };
+
+    if (groupBy === "campaign") {
+      return toDoItems.reduce((acc, item) => {
+        if (!acc[item.cadenceName]) acc[item.cadenceName] = [];
+        acc[item.cadenceName].push(item);
+        return acc;
+      }, {});
+    }
+
+    return { All: toDoItems };
+  }, [toDoItems, groupBy]);
+
+  const groupedItems = groupedData;
 
   const handleCreateCadence = () => {
     // Placeholder - no implementation yet
@@ -250,6 +272,24 @@ export default function CadencesPage() {
       {/* To Do Tab Content */}
       {activeTab === "todo" && (
         <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
+          {/* Group by Dropdown */}
+          <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-start">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  Group by
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => setGroupBy("none")}>
+                  None
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setGroupBy("campaign")}>
+                  Campaign
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left text-gray-700">
               <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
@@ -263,94 +303,123 @@ export default function CadencesPage() {
                 </tr>
               </thead>
               <tbody>
-                {toDoItems.map((item) => {
-                  const pastDue = isPastDue(item.dueOn);
-                  return (
-                    <tr
-                      key={item.id}
-                      className="border-b hover:bg-gray-50 transition group cursor-pointer"
-                      onClick={() => handleToDoRowClick(item.cadenceId)}
-                    >
-                      <td className="px-4 py-3 font-medium text-gray-900">
-                        {item.company}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {item.firstName} {item.lastName}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">{item.title}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-start">
-                          <div className="w-6 flex items-center justify-start flex-shrink-0 mt-0.5">
-                            <button
-                              className={`h-6 w-6 rounded-full flex items-center justify-center transition-all ${
-                                pastDue
-                                  ? "bg-gray-200 hover:bg-gray-300"
-                                  : "border border-gray-300 bg-transparent hover:border-gray-400"
-                              }`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                console.log("Execute action for item:", item.id);
-                              }}
-                            >
-                              <Play
-                                className={`h-3 w-3 ${
-                                  pastDue
-                                    ? "text-blue-700 fill-blue-700"
-                                    : "text-gray-900"
-                                }`}
-                              />
-                            </button>
-                          </div>
-                          <div className="ml-2 flex flex-col">
-                            <span className="text-gray-700">{item.currentStep}</span>
-                            <span className="text-xs text-gray-400 mt-0.5">{item.cadenceName}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-start">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <MoreVertical className="h-4 w-4 text-gray-500" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              <DropdownMenuItem
-                                onClick={(e) => handleHistoricalActions(item.id, e)}
-                              >
-                                <History className="h-4 w-4 mr-2" />
-                                View History
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={(e) => handleSkip(item.id, e)}
-                              >
-                                <SkipForward className="h-4 w-4 mr-2" />
-                                Skip Step
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={(e) => handlePostpone(item.id, e)}
-                              >
-                                <Clock className="h-4 w-4 mr-2" />
-                                Postpone
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </td>
-                      <td
-                        className={`px-4 py-3 font-medium ${
-                          pastDue ? "text-red-600" : "text-green-600"
-                        }`}
+                {Object.entries(groupedItems).map(([group, rows]) => (
+                  <React.Fragment key={group}>
+                    {groupBy !== "none" && (
+                      <tr
+                        className="bg-gray-100 font-semibold cursor-pointer"
+                        onClick={() => toggleGroupExpand(group)}
                       >
-                        {formatDateWithOrdinal(item.dueOn)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        <td className="p-2">
+                          {expandedGroups[group] ? (
+                            <ChevronDown className="h-4 w-4 inline" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 inline" />
+                          )}
+                        </td>
+                        <td className="p-2 text-blue-700" colSpan={1}>
+                          {group}{" "}
+                          <span className="text-gray-500 text-sm">
+                            ({rows.length})
+                          </span>
+                        </td>
+                        <td colSpan={5}></td>
+                      </tr>
+                    )}
+
+                    {(groupBy === "none" || expandedGroups[group]) &&
+                      rows.map((item) => {
+                        const pastDue = isPastDue(item.dueOn);
+                        return (
+                          <tr
+                            key={item.id}
+                            className="border-b hover:bg-gray-50 transition group cursor-pointer"
+                            onClick={() => handleToDoRowClick(item.cadenceId)}
+                          >
+                            <td className="px-4 py-3 font-medium text-gray-900">
+                              {item.company}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700">
+                              {item.firstName} {item.lastName}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">{item.title}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-start">
+                                <div className="w-6 flex items-center justify-start flex-shrink-0 mt-0.5">
+                                  <button
+                                    className={`h-6 w-6 rounded-full flex items-center justify-center transition-all ${
+                                      pastDue
+                                        ? "bg-gray-200 hover:bg-gray-300"
+                                        : "border border-gray-300 bg-transparent hover:border-gray-400"
+                                    }`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      console.log("Execute action for item:", item.id);
+                                    }}
+                                  >
+                                    <Play
+                                      className={`h-3 w-3 ${
+                                        pastDue
+                                          ? "text-blue-700 fill-blue-700"
+                                          : "text-gray-900"
+                                      }`}
+                                    />
+                                  </button>
+                                </div>
+                                <div className="ml-2 flex flex-col">
+                                  <span className="text-gray-700">{item.currentStep}</span>
+                                  <span className="text-xs text-gray-400 mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 w-fit">
+                                    {item.cadenceName}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-start">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <MoreVertical className="h-4 w-4 text-gray-500" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="start">
+                                    <DropdownMenuItem
+                                      onClick={(e) => handleHistoricalActions(item.id, e)}
+                                    >
+                                      <History className="h-4 w-4 mr-2" />
+                                      View History
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={(e) => handleSkip(item.id, e)}
+                                    >
+                                      <SkipForward className="h-4 w-4 mr-2" />
+                                      Skip Step
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={(e) => handlePostpone(item.id, e)}
+                                    >
+                                      <Clock className="h-4 w-4 mr-2" />
+                                      Postpone
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </td>
+                            <td
+                              className={`px-4 py-3 font-medium ${
+                                pastDue ? "text-red-600" : "text-green-600"
+                              }`}
+                            >
+                              {formatDateWithOrdinal(item.dueOn)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </React.Fragment>
+                ))}
               </tbody>
             </table>
           </div>
