@@ -254,7 +254,6 @@ export default function CadencesPage() {
             <table className="w-full text-sm text-left text-gray-700">
               <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
                 <tr>
-                  <th className="px-4 py-3 text-left">Cadence Name</th>
                   <th className="px-4 py-3 text-left">Company</th>
                   <th className="px-4 py-3 text-left">Full Name</th>
                   <th className="px-4 py-3 text-left">Title</th>
@@ -272,9 +271,6 @@ export default function CadencesPage() {
                       className="border-b hover:bg-gray-50 transition group cursor-pointer"
                       onClick={() => handleToDoRowClick(item.cadenceId)}
                     >
-                      <td className="px-4 py-3 font-medium text-blue-600 hover:underline">
-                        {item.cadenceName}
-                      </td>
                       <td className="px-4 py-3 font-medium text-gray-900">
                         {item.company}
                       </td>
@@ -283,8 +279,8 @@ export default function CadencesPage() {
                       </td>
                       <td className="px-4 py-3 text-gray-600">{item.title}</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center">
-                          <div className="w-6 flex items-center justify-start flex-shrink-0">
+                        <div className="flex items-start">
+                          <div className="w-6 flex items-center justify-start flex-shrink-0 mt-0.5">
                             <button
                               className={`h-6 w-6 rounded-full flex items-center justify-center transition-all ${
                                 pastDue
@@ -305,7 +301,10 @@ export default function CadencesPage() {
                               />
                             </button>
                           </div>
-                          <span className="ml-2 text-gray-700">{item.currentStep}</span>
+                          <div className="ml-2 flex flex-col">
+                            <span className="text-gray-700">{item.currentStep}</span>
+                            <span className="text-xs text-gray-400 mt-0.5">{item.cadenceName}</span>
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
