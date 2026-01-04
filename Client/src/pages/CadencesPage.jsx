@@ -1,8 +1,14 @@
 // src/pages/CadencesPage.jsx
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Plus, MailCheck, Eye, Edit } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, MailCheck, Eye, Edit, Play, MoreVertical, History, SkipForward, Clock } from "lucide-react";
 
 // Mock cadence data
 const mockCadences = [
@@ -40,8 +46,124 @@ const mockCadences = [
   },
 ];
 
+// Check if date is past due
+function isPastDue(dateString) {
+  if (!dateString) return false;
+  const dueDate = new Date(dateString);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  dueDate.setHours(0, 0, 0, 0);
+  return dueDate < today;
+}
+
+// Format date as "June 15th, 2025"
+function formatDateWithOrdinal(dateString) {
+  if (!dateString) return "—";
+  const date = new Date(dateString);
+  const day = date.getDate();
+  const month = date.toLocaleString("en-US", { month: "long" });
+  const year = date.getFullYear();
+
+  const getOrdinal = (n) => {
+    if (n > 3 && n < 21) return "th";
+    switch (n % 10) {
+      case 1:
+        return "st";
+      case 2:
+        return "nd";
+      case 3:
+        return "rd";
+      default:
+        return "th";
+    }
+  };
+
+  return `${month} ${day}${getOrdinal(day)}, ${year}`;
+}
+
+// Generate mock To Do items (all due/past due steps across cadences)
+const generateToDoItems = () => {
+  const today = new Date();
+  const getDateString = (daysFromToday) => {
+    const date = new Date(today);
+    date.setDate(date.getDate() + daysFromToday);
+    return date.toISOString().split("T")[0];
+  };
+
+  return [
+    {
+      id: 1,
+      cadenceId: 1,
+      cadenceName: "Q1 Enterprise Outreach",
+      company: "General Electric",
+      firstName: "John",
+      lastName: "Doe",
+      title: "VP of IT",
+      currentStep: "Step 1: Intro",
+      dueOn: getDateString(-1), // 1 day ago (past due)
+    },
+    {
+      id: 2,
+      cadenceId: 2,
+      cadenceName: "Follow-up Campaign",
+      company: "Dupont",
+      firstName: "Elton",
+      lastName: "John",
+      title: "VP, Strategic Projects",
+      currentStep: "Step 2: Multi-Action",
+      dueOn: getDateString(-2), // 2 days ago (past due)
+    },
+    {
+      id: 3,
+      cadenceId: 2,
+      cadenceName: "Follow-up Campaign",
+      company: "Acme Co",
+      firstName: "John",
+      lastName: "Kennedy",
+      title: "VP of Finance",
+      currentStep: "Step 2: Email Follow Up",
+      dueOn: getDateString(-2), // 2 days ago (past due)
+    },
+    {
+      id: 4,
+      cadenceId: 1,
+      cadenceName: "Q1 Enterprise Outreach",
+      company: "Microsoft",
+      firstName: "Jane",
+      lastName: "Smith",
+      title: "Director of Sales",
+      currentStep: "Step 3: Phone Call",
+      dueOn: getDateString(0), // Today (due)
+    },
+    {
+      id: 5,
+      cadenceId: 4,
+      cadenceName: "New Customer Onboarding",
+      company: "Amazon",
+      firstName: "Alice",
+      lastName: "Johnson",
+      title: "CTO",
+      currentStep: "Step 1: Welcome Email",
+      dueOn: getDateString(0), // Today (due)
+    },
+    {
+      id: 6,
+      cadenceId: 3,
+      cadenceName: "Product Demo Follow-up",
+      company: "Google",
+      firstName: "Bob",
+      lastName: "Williams",
+      title: "VP of Engineering",
+      currentStep: "Step 2: Follow-up Call",
+      dueOn: getDateString(-3), // 3 days ago (past due)
+    },
+  ];
+};
+
 export default function CadencesPage() {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("todo");
+  const toDoItems = generateToDoItems();
 
   const handleCreateCadence = () => {
     // Placeholder - no implementation yet
@@ -63,6 +185,25 @@ export default function CadencesPage() {
     navigate(`/cadences/${cadenceId}`);
   };
 
+  const handleToDoRowClick = (cadenceId) => {
+    navigate(`/cadences/${cadenceId}`);
+  };
+
+  const handleSkip = (itemId, e) => {
+    e.stopPropagation();
+    console.log("Skip for item:", itemId);
+  };
+
+  const handlePostpone = (itemId, e) => {
+    e.stopPropagation();
+    console.log("Postpone for item:", itemId);
+  };
+
+  const handleHistoricalActions = (itemId, e) => {
+    e.stopPropagation();
+    console.log("Historical actions for item:", itemId);
+  };
+
   return (
     <div className="p-6 flex flex-col gap-4">
       {/* Header */}
@@ -82,8 +223,144 @@ export default function CadencesPage() {
         </Button>
       </div>
 
-      {/* Cadence List Table */}
-      <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
+      {/* Tabs */}
+      <div className="flex gap-6 border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab("todo")}
+          className={`pb-2 px-1 text-sm font-medium transition-colors ${
+            activeTab === "todo"
+              ? "text-blue-600 border-b-2 border-blue-600"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          To Do
+        </button>
+        <button
+          onClick={() => setActiveTab("cadences")}
+          className={`pb-2 px-1 text-sm font-medium transition-colors ${
+            activeTab === "cadences"
+              ? "text-blue-600 border-b-2 border-blue-600"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Cadences
+        </button>
+      </div>
+
+      {/* To Do Tab Content */}
+      {activeTab === "todo" && (
+        <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left text-gray-700">
+              <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
+                <tr>
+                  <th className="px-4 py-3 text-left">Cadence Name</th>
+                  <th className="px-4 py-3 text-left">Company</th>
+                  <th className="px-4 py-3 text-left">Full Name</th>
+                  <th className="px-4 py-3 text-left">Title</th>
+                  <th className="px-4 py-3 text-left">Current Step</th>
+                  <th className="px-4 py-3 text-left">Actions</th>
+                  <th className="px-4 py-3 text-left">Due on</th>
+                </tr>
+              </thead>
+              <tbody>
+                {toDoItems.map((item) => {
+                  const pastDue = isPastDue(item.dueOn);
+                  return (
+                    <tr
+                      key={item.id}
+                      className="border-b hover:bg-gray-50 transition group cursor-pointer"
+                      onClick={() => handleToDoRowClick(item.cadenceId)}
+                    >
+                      <td className="px-4 py-3 font-medium text-blue-600 hover:underline">
+                        {item.cadenceName}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        {item.company}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">
+                        {item.firstName} {item.lastName}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{item.title}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center">
+                          <div className="w-6 flex items-center justify-start flex-shrink-0">
+                            <button
+                              className={`h-6 w-6 rounded-full flex items-center justify-center transition-all ${
+                                pastDue
+                                  ? "bg-gray-200 hover:bg-gray-300"
+                                  : "border border-gray-300 bg-transparent hover:border-gray-400"
+                              }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                console.log("Execute action for item:", item.id);
+                              }}
+                            >
+                              <Play
+                                className={`h-3 w-3 ${
+                                  pastDue
+                                    ? "text-blue-700 fill-blue-700"
+                                    : "text-gray-900"
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          <span className="ml-2 text-gray-700">{item.currentStep}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-start">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreVertical className="h-4 w-4 text-gray-500" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              <DropdownMenuItem
+                                onClick={(e) => handleHistoricalActions(item.id, e)}
+                              >
+                                <History className="h-4 w-4 mr-2" />
+                                View History
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={(e) => handleSkip(item.id, e)}
+                              >
+                                <SkipForward className="h-4 w-4 mr-2" />
+                                Skip Step
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={(e) => handlePostpone(item.id, e)}
+                              >
+                                <Clock className="h-4 w-4 mr-2" />
+                                Postpone
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </td>
+                      <td
+                        className={`px-4 py-3 font-medium ${
+                          pastDue ? "text-red-600" : "text-green-600"
+                        }`}
+                      >
+                        {formatDateWithOrdinal(item.dueOn)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Cadences Tab Content */}
+      {activeTab === "cadences" && (
+        <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
         <table className="w-full text-sm text-left text-gray-700">
           <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
             <tr>
@@ -150,6 +427,7 @@ export default function CadencesPage() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
