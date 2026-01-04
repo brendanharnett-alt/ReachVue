@@ -18,6 +18,7 @@ import {
   Linkedin,
 } from "lucide-react";
 import MultiActionModal from "@/components/modals/MultiActionModal";
+import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
 
 // Generate mock data with dates relative to today
 const generateMockPeople = () => {
@@ -150,6 +151,7 @@ export default function CadenceDetailPage() {
   const mockPeopleInCadence = generateMockPeople();
   const [multiActionModalOpen, setMultiActionModalOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
+  const [selectedContact, setSelectedContact] = useState(null);
 
   // Mock actions for multi-action steps
   const getMultiActions = (personId) => {
@@ -241,18 +243,27 @@ export default function CadenceDetailPage() {
       </div>
 
       {/* People in Cadence Table */}
-      <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left text-gray-700">
+      <div className="flex">
+        <div
+          className={`border rounded-lg bg-white shadow-sm overflow-hidden ${
+            selectedContact ? "w-2/3" : "w-full"
+          }`}
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left text-gray-700">
             <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Company</th>
-                <th className="px-4 py-3 text-left font-medium">Full Name</th>
-                <th className="px-4 py-3 text-left font-medium">Title</th>
-                <th className="px-4 py-3 text-left font-medium">Current Step</th>
-                <th className="px-4 py-3 text-left font-medium">Actions</th>
-                <th className="px-4 py-3 text-left font-medium">Due on</th>
-                <th className="px-4 py-3 text-left font-medium">Last Step Completed At</th>
+                <th className="p-2 text-left font-medium">Company</th>
+                <th className="p-2 text-left font-medium">Full Name</th>
+                <th className="p-2 text-left font-medium">Title</th>
+                <th className="p-2 text-left font-medium">Current Step</th>
+                {!selectedContact && (
+                  <>
+                    <th className="p-2 text-left font-medium">Actions</th>
+                    <th className="p-2 text-left font-medium">Due on</th>
+                    <th className="p-2 text-left font-medium">Last Step Completed At</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -263,12 +274,15 @@ export default function CadenceDetailPage() {
                     key={person.id}
                     className="border-b hover:bg-gray-50 transition group"
                   >
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                    <td className="p-2 font-medium text-gray-900 truncate max-w-[140px]">
                       {person.company}
                     </td>
-                    <td className="px-4 py-3 text-gray-700">
+                    <td className="p-2 text-gray-700">
                       <div className="flex items-center gap-2">
-                        <span>
+                        <span
+                          className="cursor-pointer hover:text-blue-600 hover:underline truncate max-w-[140px]"
+                          onClick={() => setSelectedContact(person)}
+                        >
                           {person.firstName} {person.lastName}
                         </span>
                         <button
@@ -280,8 +294,8 @@ export default function CadenceDetailPage() {
                         </button>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{person.title}</td>
-                    <td className="px-4 py-3">
+                    <td className="p-2 text-gray-600 truncate max-w-[160px]">{person.title}</td>
+                    <td className="p-2">
                       <div className="flex items-center">
                         <div className="w-6 flex items-center justify-start flex-shrink-0">
                           <button
@@ -316,69 +330,82 @@ export default function CadenceDetailPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-gray-600 hover:text-gray-900"
-                            onClick={(e) => e.stopPropagation()}
+                    {!selectedContact && (
+                      <>
+                        <td className="p-2">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-gray-600 hover:text-gray-900"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40">
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleHistoricalActions(person.id, e);
+                                }}
+                              >
+                                <History className="mr-2 h-4 w-4" />
+                                View History
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSkip(person.id, e);
+                                }}
+                              >
+                                <SkipForward className="mr-2 h-4 w-4" />
+                                Skip Step
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePostpone(person.id, e);
+                                }}
+                              >
+                                <Clock className="mr-2 h-4 w-4" />
+                                Postpone
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                        <td className="p-2">
+                          <span
+                            className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                              pastDue
+                                ? "bg-red-100 text-red-800"
+                                : "bg-green-100 text-green-800"
+                            }`}
                           >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleHistoricalActions(person.id, e);
-                            }}
-                          >
-                            <History className="mr-2 h-4 w-4" />
-                            View History
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSkip(person.id, e);
-                            }}
-                          >
-                            <SkipForward className="mr-2 h-4 w-4" />
-                            Skip Step
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePostpone(person.id, e);
-                            }}
-                          >
-                            <Clock className="mr-2 h-4 w-4" />
-                            Postpone
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                          pastDue
-                            ? "bg-red-100 text-red-800"
-                            : "bg-green-100 text-green-800"
-                        }`}
-                      >
-                        {formatDateWithOrdinal(person.dueOn)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {formatLastStepCompleted(person.lastStepCompletedAt)}
-                    </td>
+                            {formatDateWithOrdinal(person.dueOn)}
+                          </span>
+                        </td>
+                        <td className="p-2 text-gray-600 whitespace-nowrap text-xs">
+                          {formatLastStepCompleted(person.lastStepCompletedAt)}
+                        </td>
+                      </>
+                    )}
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+        </div>
+
+        {/* Contact Panel */}
+        {selectedContact && (
+          <CadenceContactPanel
+            contact={selectedContact}
+            onClose={() => setSelectedContact(null)}
+          />
+        )}
       </div>
 
       {/* Multi-Action Modal */}
@@ -390,6 +417,7 @@ export default function CadenceDetailPage() {
           actions={getMultiActions(selectedPerson.id)}
         />
       )}
+
     </div>
   );
 }
