@@ -1,8 +1,23 @@
 // src/pages/CadenceDetailPage.jsx
-import React from "react";
+import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  ArrowLeft,
+  Play,
+  SkipForward,
+  Clock,
+  History,
+  MoreVertical,
+  Linkedin,
+} from "lucide-react";
+import MultiActionModal from "@/components/modals/MultiActionModal";
 
 // Generate mock data with dates relative to today
 const generateMockPeople = () => {
@@ -30,7 +45,7 @@ const generateMockPeople = () => {
       firstName: "Elton",
       lastName: "John",
       title: "VP, Strategic Projects",
-      currentStep: "Step 2: Email Follow Up",
+      currentStep: "Step 2: Multi-Action",
       dueOn: getDateString(-2), // 2 days ago (past due)
       lastStepCompletedAt: getDateString(-3), // 3 days ago
     },
@@ -133,11 +148,55 @@ export default function CadenceDetailPage() {
   const navigate = useNavigate();
   const cadenceName = getCadenceName(parseInt(cadenceId));
   const mockPeopleInCadence = generateMockPeople();
+  const [multiActionModalOpen, setMultiActionModalOpen] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState(null);
 
-  const handleExecuteAction = (personId, e) => {
+  // Mock actions for multi-action steps
+  const getMultiActions = (personId) => {
+    return [
+      {
+        id: 1,
+        name: "Send Email",
+        dueOn: null,
+      },
+      {
+        id: 2,
+        name: "Phone Call",
+        dueOn: null,
+      },
+      {
+        id: 3,
+        name: "LinkedIn Message",
+        dueOn: null,
+      },
+    ];
+  };
+
+  const handleOpenMultiActionModal = (person) => {
+    setSelectedPerson(person);
+    setMultiActionModalOpen(true);
+  };
+
+  const handleExecuteAction = (person, e) => {
     e.stopPropagation();
-    // Placeholder - no implementation yet
-    console.log("Execute action for person:", personId);
+    if (person.currentStep.includes("Multi-Action")) {
+      handleOpenMultiActionModal(person);
+    } else {
+      // Placeholder - no implementation yet
+      console.log("Execute action for person:", person.id);
+    }
+  };
+
+  const handleStepTextClick = (person) => {
+    if (person.currentStep.includes("Multi-Action")) {
+      handleOpenMultiActionModal(person);
+    }
+  };
+
+  const handleLinkedInClick = (e) => {
+    e.stopPropagation();
+    // Open IBM CEO Arvind Krishna's LinkedIn profile
+    window.open("https://www.linkedin.com/in/arvindkrishna/", "_blank");
   };
 
   const handleSkip = (personId, e) => {
@@ -188,12 +247,10 @@ export default function CadenceDetailPage() {
             <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Company</th>
-                <th className="px-4 py-3 text-left font-medium">First Name</th>
-                <th className="px-4 py-3 text-left font-medium">Last Name</th>
+                <th className="px-4 py-3 text-left font-medium">Full Name</th>
                 <th className="px-4 py-3 text-left font-medium">Title</th>
                 <th className="px-4 py-3 text-left font-medium">Current Step</th>
-                <th className="px-4 py-3 text-left font-medium">Execute Action</th>
-                <th className="px-4 py-3 text-left font-medium">Additional Actions</th>
+                <th className="px-4 py-3 text-left font-medium">Actions</th>
                 <th className="px-4 py-3 text-left font-medium">Due on</th>
                 <th className="px-4 py-3 text-left font-medium">Last Step Completed At</th>
               </tr>
@@ -204,56 +261,103 @@ export default function CadenceDetailPage() {
                 return (
                   <tr
                     key={person.id}
-                    className="border-b hover:bg-gray-50 transition"
+                    className="border-b hover:bg-gray-50 transition group"
                   >
                     <td className="px-4 py-3 font-medium text-gray-900">
                       {person.company}
                     </td>
-                    <td className="px-4 py-3 text-gray-700">{person.firstName}</td>
-                    <td className="px-4 py-3 text-gray-700">{person.lastName}</td>
+                    <td className="px-4 py-3 text-gray-700">
+                      <div className="flex items-center gap-2">
+                        <span>
+                          {person.firstName} {person.lastName}
+                        </span>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 transition-opacity h-3.5 w-3.5 rounded-sm bg-[#0077B5] flex items-center justify-center hover:bg-[#006399]"
+                          onClick={handleLinkedInClick}
+                          title="Open LinkedIn Profile"
+                        >
+                          <span className="text-[8px] font-bold text-white leading-none">in</span>
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{person.title}</td>
-                    <td className="px-4 py-3 text-gray-700">{person.currentStep}</td>
                     <td className="px-4 py-3">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-2 text-gray-600 hover:text-gray-900"
-                        onClick={(e) => handleExecuteAction(person.id, e)}
-                      >
-                        <ArrowRight className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center">
+                        <div className="w-6 flex items-center justify-start flex-shrink-0">
+                          <button
+                            className={`h-6 w-6 rounded-full flex items-center justify-center transition-all ${
+                              pastDue
+                                ? "bg-gray-200 hover:bg-gray-300"
+                                : "border border-gray-300 bg-transparent hover:border-gray-400"
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleExecuteAction(person, e);
+                            }}
+                          >
+                            <Play
+                              className={`h-3 w-3 ${
+                                pastDue
+                                  ? "text-blue-700 fill-blue-700"
+                                  : "text-gray-900"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                        <span
+                          className={`ml-2 text-gray-700 ${
+                            person.currentStep.includes("Multi-Action")
+                              ? "cursor-pointer hover:text-gray-900"
+                              : ""
+                          }`}
+                          onClick={() => handleStepTextClick(person)}
+                        >
+                          {person.currentStep}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        {person.id === 1 && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs text-gray-600 hover:text-gray-900"
-                              onClick={(e) => handleHistoricalActions(person.id, e)}
-                            >
-                              Historical Actions
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs text-gray-600 hover:text-gray-900"
-                              onClick={(e) => handleSkip(person.id, e)}
-                            >
-                              Skip
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs text-gray-600 hover:text-gray-900"
-                              onClick={(e) => handlePostpone(person.id, e)}
-                            >
-                              Postpone
-                            </Button>
-                          </>
-                        )}
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-gray-600 hover:text-gray-900"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleHistoricalActions(person.id, e);
+                            }}
+                          >
+                            <History className="mr-2 h-4 w-4" />
+                            View History
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSkip(person.id, e);
+                            }}
+                          >
+                            <SkipForward className="mr-2 h-4 w-4" />
+                            Skip Step
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePostpone(person.id, e);
+                            }}
+                          >
+                            <Clock className="mr-2 h-4 w-4" />
+                            Postpone
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -276,6 +380,16 @@ export default function CadenceDetailPage() {
           </table>
         </div>
       </div>
+
+      {/* Multi-Action Modal */}
+      {selectedPerson && (
+        <MultiActionModal
+          open={multiActionModalOpen}
+          onOpenChange={setMultiActionModalOpen}
+          person={selectedPerson}
+          actions={getMultiActions(selectedPerson.id)}
+        />
+      )}
     </div>
   );
 }
