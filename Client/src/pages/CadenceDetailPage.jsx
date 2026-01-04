@@ -16,6 +16,13 @@ import {
   History,
   MoreVertical,
   Linkedin,
+  Mail,
+  Phone,
+  GripVertical,
+  Plus,
+  Edit,
+  Copy,
+  Trash2,
 } from "lucide-react";
 import MultiActionModal from "@/components/modals/MultiActionModal";
 import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
@@ -94,6 +101,53 @@ const getCadenceName = (id) => {
   return cadences[id] || `Cadence ${id}`;
 };
 
+// Generate cadence structure (14-day cadence)
+const generateCadenceStructure = (cadenceId) => {
+  // Different structures for different cadences
+  const structures = {
+    1: [
+      { day: 0, actions: [{ type: "email", label: "Initial Outreach Email" }] },
+      { day: 2, actions: [{ type: "linkedin", label: "LinkedIn Connection Request" }] },
+      { day: 4, actions: [{ type: "email", label: "Follow-up Email" }] },
+      { day: 7, actions: [{ type: "phone", label: "Phone Call" }] },
+      { day: 9, actions: [{ type: "email", label: "Value Proposition Email" }] },
+      { day: 11, actions: [{ type: "linkedin", label: "LinkedIn Message" }] },
+      { day: 14, actions: [{ type: "email", label: "Final Follow-up Email" }] },
+    ],
+    2: [
+      { day: 0, actions: [{ type: "email", label: "Re-engagement Email" }] },
+      { day: 3, actions: [{ type: "linkedin", label: "LinkedIn Touch" }] },
+      { day: 5, actions: [{ type: "email", label: "Case Study Email" }] },
+      { day: 7, actions: [{ type: "phone", label: "Warm Call" }] },
+      { day: 10, actions: [{ type: "email", label: "Closing Email" }] },
+      { day: 12, actions: [{ type: "linkedin", label: "LinkedIn Follow-up" }] },
+      { day: 14, actions: [{ type: "email", label: "Last Attempt Email" }] },
+    ],
+    3: [
+      { day: 0, actions: [{ type: "email", label: "Thank You Email" }] },
+      { day: 2, actions: [{ type: "email", label: "Additional Resources" }] },
+      { day: 4, actions: [{ type: "phone", label: "Follow-up Call" }] },
+      { day: 6, actions: [{ type: "email", label: "Implementation Guide" }] },
+      { day: 8, actions: [{ type: "linkedin", label: "LinkedIn Engagement" }] },
+      { day: 10, actions: [{ type: "email", label: "Check-in Email" }] },
+      { day: 12, actions: [{ type: "phone", label: "Success Call" }] },
+      { day: 14, actions: [{ type: "email", label: "Feedback Request" }] },
+    ],
+    4: [
+      { day: 0, actions: [{ type: "email", label: "Welcome Email" }] },
+      { day: 1, actions: [{ type: "email", label: "Getting Started Guide" }] },
+      { day: 3, actions: [{ type: "phone", label: "Onboarding Call" }] },
+      { day: 5, actions: [{ type: "email", label: "Training Resources" }] },
+      { day: 7, actions: [{ type: "linkedin", label: "LinkedIn Welcome" }] },
+      { day: 9, actions: [{ type: "email", label: "Progress Check Email" }] },
+      { day: 11, actions: [{ type: "phone", label: "Support Call" }] },
+      { day: 14, actions: [{ type: "email", label: "Success Metrics Email" }] },
+    ],
+  };
+
+  return structures[cadenceId] || structures[1];
+};
+
 // Format date as "June 15th, 2025"
 function formatDateWithOrdinal(dateString) {
   if (!dateString) return "—";
@@ -144,6 +198,17 @@ function isPastDue(dateString) {
   return dueDate < today;
 }
 
+// Add unique IDs to actions if they don't have them
+function ensureActionIds(structure) {
+  return structure.map((step) => ({
+    ...step,
+    actions: step.actions.map((action, idx) => ({
+      ...action,
+      id: action.id || `action-${step.day}-${idx}-${Date.now()}`,
+    })),
+  }));
+}
+
 export default function CadenceDetailPage() {
   const { cadenceId } = useParams();
   const navigate = useNavigate();
@@ -152,6 +217,14 @@ export default function CadenceDetailPage() {
   const [multiActionModalOpen, setMultiActionModalOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [selectedContact, setSelectedContact] = useState(null);
+  const [activeTab, setActiveTab] = useState("people");
+  const [cadenceStructure, setCadenceStructure] = useState(() => {
+    const structure = generateCadenceStructure(parseInt(cadenceId));
+    return ensureActionIds(structure);
+  });
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [draggedFromDay, setDraggedFromDay] = useState(null);
+  const [dragOverDay, setDragOverDay] = useState(null);
 
   // Mock actions for multi-action steps
   const getMultiActions = (personId) => {
@@ -219,6 +292,136 @@ export default function CadenceDetailPage() {
     console.log("Historical actions for person:", personId);
   };
 
+  const getActionIcon = (type) => {
+    switch (type) {
+      case "email":
+        return <Mail className="h-4 w-4 text-gray-500" />;
+      case "phone":
+        return <Phone className="h-4 w-4 text-gray-500" />;
+      case "linkedin":
+        return <Linkedin className="h-4 w-4 text-gray-500" />;
+      default:
+        return <Clock className="h-4 w-4 text-gray-500" />;
+    }
+  };
+
+  const handleDragStart = (e, dayIndex, actionIndex) => {
+    setDraggedItem({ dayIndex, actionIndex });
+    setDraggedFromDay(dayIndex);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", `${dayIndex}-${actionIndex}`);
+  };
+
+  const handleDragOver = (e, dayIndex = null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    if (dayIndex !== null) {
+      setDragOverDay(dayIndex);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverDay(null);
+  };
+
+  const handleDrop = (e, targetDayIndex, targetActionIndex = null) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!draggedItem) return;
+
+    const newStructure = JSON.parse(JSON.stringify(cadenceStructure));
+    const sourceStep = newStructure[draggedItem.dayIndex];
+    const action = { ...sourceStep.actions[draggedItem.actionIndex] };
+
+    // If dropping in the same position, do nothing
+    if (
+      draggedItem.dayIndex === targetDayIndex &&
+      draggedItem.actionIndex === targetActionIndex
+    ) {
+      setDraggedItem(null);
+      setDraggedFromDay(null);
+      setDragOverDay(null);
+      return;
+    }
+
+    // Remove from source
+    sourceStep.actions.splice(draggedItem.actionIndex, 1);
+
+    // Adjust target index if moving within same day and dropping before source
+    let adjustedTargetIndex = targetActionIndex;
+    if (
+      draggedItem.dayIndex === targetDayIndex &&
+      targetActionIndex !== null &&
+      targetActionIndex > draggedItem.actionIndex
+    ) {
+      adjustedTargetIndex = targetActionIndex - 1;
+    }
+
+    // Add to target
+    const targetStep = newStructure[targetDayIndex];
+    if (adjustedTargetIndex !== null && adjustedTargetIndex >= 0) {
+      targetStep.actions.splice(adjustedTargetIndex, 0, action);
+    } else {
+      targetStep.actions.push(action);
+    }
+
+    setCadenceStructure(newStructure);
+    setDraggedItem(null);
+    setDraggedFromDay(null);
+    setDragOverDay(null);
+  };
+
+  const handleAddStep = (dayIndex) => {
+    const newStructure = [...cadenceStructure];
+    newStructure[dayIndex].actions.push({
+      id: `action-${dayIndex}-${newStructure[dayIndex].actions.length}-${Date.now()}`,
+      type: "email",
+      label: "New Step",
+    });
+    setCadenceStructure(newStructure);
+  };
+
+  const handleEditAction = (dayIndex, actionIndex) => {
+    // Placeholder - would open edit modal
+    console.log("Edit action:", dayIndex, actionIndex);
+  };
+
+  const handleCopyAction = (dayIndex, actionIndex) => {
+    const newStructure = [...cadenceStructure];
+    const action = { ...newStructure[dayIndex].actions[actionIndex] };
+    action.id = `action-${dayIndex}-${newStructure[dayIndex].actions.length}-${Date.now()}`;
+    newStructure[dayIndex].actions.push(action);
+    setCadenceStructure(newStructure);
+  };
+
+  const handleDeleteAction = (dayIndex, actionIndex) => {
+    const newStructure = [...cadenceStructure];
+    newStructure[dayIndex].actions.splice(actionIndex, 1);
+    setCadenceStructure(newStructure);
+  };
+
+  const handleCadenceAction = (action) => {
+    switch (action) {
+      case "addStep":
+        // Add step to day 0 by default
+        handleAddStep(0);
+        break;
+      case "editName":
+        // Placeholder - would open edit modal
+        console.log("Edit name/description");
+        break;
+      case "copy":
+        // Placeholder - would copy entire cadence
+        console.log("Copy cadence");
+        break;
+      default:
+        break;
+    }
+  };
+
   return (
     <div className="p-6 flex flex-col gap-4">
       {/* Header */}
@@ -242,8 +445,33 @@ export default function CadenceDetailPage() {
         </div>
       </div>
 
-      {/* People in Cadence Table */}
-      <div className="flex">
+      {/* Tabs */}
+      <div className="flex gap-6 border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab("people")}
+          className={`pb-2 px-1 text-sm font-medium transition-colors ${
+            activeTab === "people"
+              ? "text-blue-600 border-b-2 border-blue-600"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          People
+        </button>
+        <button
+          onClick={() => setActiveTab("structure")}
+          className={`pb-2 px-1 text-sm font-medium transition-colors ${
+            activeTab === "structure"
+              ? "text-blue-600 border-b-2 border-blue-600"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Cadence Structure
+        </button>
+      </div>
+
+      {/* People Tab Content */}
+      {activeTab === "people" && (
+        <div className="flex">
         <div
           className={`border rounded-lg bg-white shadow-sm overflow-hidden ${
             selectedContact ? "w-2/3" : "w-full"
@@ -407,6 +635,148 @@ export default function CadenceDetailPage() {
           />
         )}
       </div>
+      )}
+
+      {/* Cadence Structure Tab Content */}
+      {activeTab === "structure" && (
+        <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
+          <div className="p-6">
+            {/* Header with Cadence Actions button */}
+            <div className="flex justify-end mb-6">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="flex items-center gap-2">
+                    Cadence Actions
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => handleCadenceAction("addStep")}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Step
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleCadenceAction("editName")}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit Name/Description
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleCadenceAction("copy")}>
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            <div className="space-y-6">
+              {cadenceStructure.map((step, dayIndex) => (
+                <div
+                  key={dayIndex}
+                  className={`border-b border-gray-200 last:border-b-0 pb-6 last:pb-0 transition-colors ${
+                    dragOverDay === dayIndex ? "bg-blue-50" : ""
+                  }`}
+                  onDragOver={(e) => handleDragOver(e, dayIndex)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, dayIndex)}
+                >
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      Day {step.day}
+                      {step.day === 0 && " (Start)"}
+                    </h3>
+                  </div>
+                  <div className="space-y-2 ml-4">
+                    {step.actions.map((action, actionIndex) => (
+                      <div
+                        key={action.id || actionIndex}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, dayIndex, actionIndex)}
+                        onDragOver={(e) => handleDragOver(e)}
+                        onDragEnd={() => {
+                          setDraggedItem(null);
+                          setDraggedFromDay(null);
+                          setDragOverDay(null);
+                        }}
+                        onDrop={(e) => {
+                          handleDrop(e, dayIndex, actionIndex);
+                        }}
+                        className={`flex items-center gap-3 p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors cursor-move ${
+                          draggedItem?.dayIndex === dayIndex && draggedItem?.actionIndex === actionIndex
+                            ? "opacity-50"
+                            : ""
+                        }`}
+                      >
+                        <div className="flex-shrink-0 cursor-grab active:cursor-grabbing">
+                          <GripVertical className="h-4 w-4 text-gray-400" />
+                        </div>
+                        <div className="flex-shrink-0">
+                          {getActionIcon(action.type)}
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-sm text-gray-700 font-medium">
+                            {action.label}
+                          </span>
+                        </div>
+                        <div className="flex-shrink-0">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40">
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditAction(dayIndex, actionIndex);
+                                }}
+                              >
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopyAction(dayIndex, actionIndex);
+                                }}
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteAction(dayIndex, actionIndex);
+                                }}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    ))}
+                    {/* Add Step button at bottom of each day */}
+                    <button
+                      onClick={() => handleAddStep(dayIndex)}
+                      className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 hover:underline mt-2 ml-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Step
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Multi-Action Modal */}
       {selectedPerson && (
@@ -417,7 +787,6 @@ export default function CadenceDetailPage() {
           actions={getMultiActions(selectedPerson.id)}
         />
       )}
-
     </div>
   );
 }
