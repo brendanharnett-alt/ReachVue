@@ -661,22 +661,6 @@ app.delete('/templates', async (req, res) => {
 });
 
 
-app.delete("/templates", async (req, res) => {
-  const { ids } = req.body;
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return res.status(400).send("Array of template IDs is required");
-  }
-
-  try {
-    const placeholders = ids.map((_, i) => `$${i + 1}`).join(", ");
-    const query = `DELETE FROM templates WHERE id IN (${placeholders})`;
-    await pool.query(query, ids);
-    res.send("Templates deleted successfully");
-  } catch (err) {
-    console.error("Error deleting templates:", err);
-    res.status(500).send("Failed to delete templates");
-  }
-});
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
