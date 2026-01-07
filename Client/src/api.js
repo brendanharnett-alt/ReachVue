@@ -224,3 +224,38 @@ export async function createCadenceStep(cadenceId, { step_order, day_number, ste
     throw err
   }
 }
+
+export async function fetchCadenceContacts(cadenceId) {
+  try {
+    const res = await fetch(`${BASE_URL}/cadences/${cadenceId}/contacts`)
+    if (!res.ok) throw new Error("Failed to fetch cadence contacts")
+    return await res.json()
+  } catch (err) {
+    console.error("Fetch cadence contacts error:", err)
+    return []
+  }
+}
+
+export async function addContactToCadence(cadenceId, contactId) {
+  try {
+    const res = await fetch(`${BASE_URL}/cadences/${cadenceId}/contacts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contact_id: contactId }),
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || "Failed to add contact to cadence")
+    }
+    const contentType = res.headers.get("content-type")
+    if (contentType && contentType.includes("application/json")) {
+      return await res.json()
+    } else {
+      // Handle non-JSON responses (e.g., 201 Created with no body)
+      return { success: true }
+    }
+  } catch (err) {
+    console.error("Add contact to cadence error:", err)
+    throw err
+  }
+}

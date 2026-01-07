@@ -27,7 +27,8 @@ import {
 import MultiActionModal from "@/components/modals/MultiActionModal";
 import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
 import AddStepModal from "@/components/modals/AddStepModal";
-import { fetchCadenceSteps, createCadenceStep } from "@/api";
+import AddContactToCadenceModal from "@/components/modals/AddContactToCadenceModal";
+import { fetchCadenceSteps, createCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts } from "@/api";
 
 // Generate mock data with dates relative to today
 const generateMockPeople = () => {
@@ -216,10 +217,12 @@ export default function CadenceDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const cadenceName = getCadenceName(parseInt(cadenceId));
-  const mockPeopleInCadence = generateMockPeople();
+  const [peopleInCadence, setPeopleInCadence] = useState([]);
+  const [loadingContacts, setLoadingContacts] = useState(true);
   const [multiActionModalOpen, setMultiActionModalOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [selectedContact, setSelectedContact] = useState(null);
+  const [addContactModalOpen, setAddContactModalOpen] = useState(false);
   
   // Check URL params for tab query param
   const searchParams = new URLSearchParams(location.search);
@@ -280,6 +283,96 @@ export default function CadenceDetailPage() {
     };
     loadSteps();
   }, [cadenceId]);
+
+  // Fetch cadence contacts from backend
+  useEffect(() => {
+    const loadContacts = async () => {
+      if (!cadenceId) return;
+      setLoadingContacts(true);
+      try {
+        const [cadenceContacts, allContacts] = await Promise.all([
+          fetchCadenceContacts(cadenceId),
+          fetchContacts(), // Fetch all contacts to get company and title
+        ]);
+        
+        // Create a map of contact_id to full contact details
+        const contactMap = new Map();
+        allContacts.forEach((contact) => {
+          contactMap.set(contact.id, contact);
+        });
+        
+        // Transform backend data to match UI format
+        const transformed = cadenceContacts.map((contact) => {
+          const fullContact = contactMap.get(contact.contact_id) || {};
+          
+          // Calculate due date based on current step's day_number
+          const currentStepOrder = contact.current_step_order;
+          let dueDate = null;
+          let currentStepLabel = "Not Started";
+          
+          if (currentStepOrder !== null && cadenceStructure.length > 0) {
+            // Find the step with matching step_order
+            const allSteps = cadenceStructure.flatMap((day) => day.actions);
+            const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
+            
+            if (currentStep) {
+              // Check if this step has multiple actions on the same day (multi-step)
+              const daySteps = cadenceStructure
+                .find((d) => d.day === currentStep.day_number)?.actions || [];
+              const sameDaySteps = daySteps.filter((s) => s.step_order === currentStepOrder);
+              
+              if (sameDaySteps.length > 1 || currentStep.label.toLowerCase().includes("multi")) {
+                currentStepLabel = `Step ${currentStepOrder + 1}: Multi-Action`;
+              } else {
+                currentStepLabel = `Step ${currentStepOrder + 1}: ${currentStep.label}`;
+              }
+              
+              // Calculate due date: today + day_number (simplified - in real app would track join date)
+              const today = new Date();
+              const dueDateObj = new Date(today);
+              dueDateObj.setDate(today.getDate() + (currentStep.day_number || 0));
+              dueDate = dueDateObj.toISOString().split("T")[0];
+            } else if (contact.step_label) {
+              currentStepLabel = contact.step_label;
+            }
+          } else if (contact.step_label) {
+            currentStepLabel = contact.step_label;
+          }
+
+          return {
+            id: contact.contact_cadence_id,
+            contactId: contact.contact_id,
+            company: fullContact.company || "—",
+            firstName: contact.first_name || "",
+            lastName: contact.last_name || "",
+            first_name: contact.first_name || "", // For panel compatibility
+            last_name: contact.last_name || "", // For panel compatibility
+            title: fullContact.title || "—",
+            email: fullContact.email || null,
+            mobile_phone: fullContact.mobile_phone || null,
+            phone: fullContact.mobile_phone || null, // Alias for panel
+            linkedin_url: fullContact.linkedin_url || null,
+            tags: fullContact.tags || [],
+            currentStep: currentStepLabel,
+            dueOn: dueDate,
+            lastStepCompletedAt: null, // Backend doesn't provide this yet
+            currentStepOrder: currentStepOrder,
+            dayNumber: contact.day_number,
+          };
+        });
+        setPeopleInCadence(transformed);
+      } catch (err) {
+        console.error("Failed to load cadence contacts:", err);
+        setPeopleInCadence([]);
+      } finally {
+        setLoadingContacts(false);
+      }
+    };
+    // Only load contacts after steps are loaded (we need cadenceStructure for due date calculation)
+    if (!loadingSteps && cadenceId) {
+      loadContacts();
+    }
+  }, [cadenceId, cadenceStructure, loadingSteps]);
 
   // Mock actions for multi-action steps
   const getMultiActions = (personId) => {
@@ -539,6 +632,80 @@ export default function CadenceDetailPage() {
     }, 50); // Small delay to ensure dropdown closes first
   };
 
+  const handleAddContact = async (contact) => {
+    try {
+      await addContactToCadence(cadenceId, contact.id);
+      // Reload contacts
+      const [cadenceContacts, allContacts] = await Promise.all([
+        fetchCadenceContacts(cadenceId),
+        fetchContacts(),
+      ]);
+      
+      const contactMap = new Map();
+      allContacts.forEach((c) => {
+        contactMap.set(c.id, c);
+      });
+      
+      const transformed = cadenceContacts.map((contact) => {
+        const fullContact = contactMap.get(contact.contact_id) || {};
+        const currentStepOrder = contact.current_step_order;
+        let dueDate = null;
+        let currentStepLabel = "Not Started";
+        
+        if (currentStepOrder !== null && cadenceStructure.length > 0) {
+          const allSteps = cadenceStructure.flatMap((day) => day.actions);
+          const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
+          
+          if (currentStep) {
+            const daySteps = cadenceStructure
+              .find((d) => d.day === currentStep.day_number)?.actions || [];
+            const sameDaySteps = daySteps.filter((s) => s.step_order === currentStepOrder);
+            
+            if (sameDaySteps.length > 1 || currentStep.label.toLowerCase().includes("multi")) {
+              currentStepLabel = `Step ${currentStepOrder + 1}: Multi-Action`;
+            } else {
+              currentStepLabel = `Step ${currentStepOrder + 1}: ${currentStep.label}`;
+            }
+            
+            const today = new Date();
+            const dueDateObj = new Date(today);
+            dueDateObj.setDate(today.getDate() + (currentStep.day_number || 0));
+            dueDate = dueDateObj.toISOString().split("T")[0];
+          } else if (contact.step_label) {
+            currentStepLabel = contact.step_label;
+          }
+        } else if (contact.step_label) {
+          currentStepLabel = contact.step_label;
+        }
+
+        return {
+          id: contact.contact_cadence_id,
+          contactId: contact.contact_id,
+          company: fullContact.company || "—",
+          firstName: contact.first_name || "",
+          lastName: contact.last_name || "",
+          first_name: contact.first_name || "", // For panel compatibility
+          last_name: contact.last_name || "", // For panel compatibility
+          title: fullContact.title || "—",
+          email: fullContact.email || null,
+          mobile_phone: fullContact.mobile_phone || null,
+          phone: fullContact.mobile_phone || null, // Alias for panel
+          linkedin_url: fullContact.linkedin_url || null,
+          tags: fullContact.tags || [],
+          currentStep: currentStepLabel,
+          dueOn: dueDate,
+          lastStepCompletedAt: null,
+          currentStepOrder: currentStepOrder,
+          dayNumber: contact.day_number,
+        };
+      });
+      setPeopleInCadence(transformed);
+    } catch (err) {
+      console.error("Failed to add contact to cadence:", err);
+      alert(err.message || "Failed to add contact to cadence. Please try again.");
+    }
+  };
+
   return (
     <div className="p-6 flex flex-col gap-4">
       {/* Header */}
@@ -556,7 +723,7 @@ export default function CadenceDetailPage() {
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">{cadenceName}</h1>
             <p className="text-sm text-gray-500 mt-1">
-              {mockPeopleInCadence.length} people in cadence
+              {peopleInCadence.length} people in cadence
             </p>
           </div>
         </div>
@@ -600,6 +767,16 @@ export default function CadenceDetailPage() {
             selectedContact ? "w-2/3" : "w-full"
           }`}
         >
+          {/* Add to Cadence Button */}
+          <div className="p-4 border-b flex justify-end">
+            <Button
+              onClick={() => setAddContactModalOpen(true)}
+              className="bg-primary text-white"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add to Cadence
+            </Button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left text-gray-700">
             <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
@@ -618,7 +795,20 @@ export default function CadenceDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {mockPeopleInCadence.map((person) => {
+              {loadingContacts ? (
+                <tr>
+                  <td colSpan={selectedContact ? 4 : 7} className="p-8 text-center text-gray-500">
+                    Loading contacts...
+                  </td>
+                </tr>
+              ) : peopleInCadence.length === 0 ? (
+                <tr>
+                  <td colSpan={selectedContact ? 4 : 7} className="p-8 text-center text-gray-500">
+                    No contacts in this cadence yet. Click "Add to Cadence" to get started.
+                  </td>
+                </tr>
+              ) : (
+                peopleInCadence.map((person) => {
                 const pastDue = isPastDue(person.dueOn);
                 return (
                   <tr
@@ -744,7 +934,8 @@ export default function CadenceDetailPage() {
                     )}
                   </tr>
                 );
-              })}
+              })
+              )}
             </tbody>
           </table>
         </div>
@@ -932,6 +1123,14 @@ export default function CadenceDetailPage() {
         onClose={() => setAddStepModalOpen(false)}
         onSuccess={handleAddStepSuccess}
         dayNumber={addStepDayNumber}
+      />
+
+      {/* Add Contact to Cadence Modal */}
+      <AddContactToCadenceModal
+        open={addContactModalOpen}
+        onClose={() => setAddContactModalOpen(false)}
+        onAdd={handleAddContact}
+        cadenceId={cadenceId}
       />
     </div>
   );

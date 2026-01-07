@@ -989,7 +989,7 @@ app.post('/cadences/:cadenceId/contacts', async (req, res) => {
       [contact_id, cadenceId]
     );
 
-    res.sendStatus(201);
+    res.status(201).json({ success: true, message: "Contact added to cadence" });
   } catch (err) {
     console.error('Error adding contact to cadence:', err);
     res.status(500).send('Failed to add contact to cadence');
