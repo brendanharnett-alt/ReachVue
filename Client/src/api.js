@@ -259,3 +259,20 @@ export async function addContactToCadence(cadenceId, contactId) {
     throw err
   }
 }
+
+export async function removeContactFromCadence(contactCadenceId) {
+  try {
+    const res = await fetch(`${BASE_URL}/contact-cadences/${contactCadenceId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || "Failed to remove contact from cadence")
+    }
+    return { success: true }
+  } catch (err) {
+    console.error("Remove contact from cadence error:", err)
+    throw err
+  }
+}

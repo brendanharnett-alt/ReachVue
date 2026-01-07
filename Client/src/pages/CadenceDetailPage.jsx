@@ -28,7 +28,7 @@ import MultiActionModal from "@/components/modals/MultiActionModal";
 import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
 import AddStepModal from "@/components/modals/AddStepModal";
 import AddContactToCadenceModal from "@/components/modals/AddContactToCadenceModal";
-import { fetchCadenceSteps, createCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts } from "@/api";
+import { fetchCadenceSteps, createCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts, removeContactFromCadence } from "@/api";
 
 // Generate mock data with dates relative to today
 const generateMockPeople = () => {
@@ -223,6 +223,7 @@ export default function CadenceDetailPage() {
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [selectedContact, setSelectedContact] = useState(null);
   const [addContactModalOpen, setAddContactModalOpen] = useState(false);
+  const [selectedContacts, setSelectedContacts] = useState([]);
   
   // Check URL params for tab query param
   const searchParams = new URLSearchParams(location.search);
@@ -693,6 +694,134 @@ export default function CadenceDetailPage() {
     }, 50); // Small delay to ensure dropdown closes first
   };
 
+  // Handle checkbox selection
+  const toggleSelect = (contactCadenceId) => {
+    setSelectedContacts((prev) =>
+      prev.includes(contactCadenceId)
+        ? prev.filter((id) => id !== contactCadenceId)
+        : [...prev, contactCadenceId]
+    );
+  };
+
+  // Handle select all
+  const toggleSelectAll = () => {
+    if (selectedContacts.length === peopleInCadence.length) {
+      setSelectedContacts([]);
+    } else {
+      setSelectedContacts(peopleInCadence.map((person) => person.id));
+    }
+  };
+
+  // Handle delete selected contacts
+  const handleDeleteSelected = async () => {
+    if (!selectedContacts.length) return;
+    if (!window.confirm(`Remove ${selectedContacts.length} contact(s) from this cadence?`)) return;
+
+    try {
+      // Delete each selected contact from cadence
+      await Promise.all(
+        selectedContacts.map((contactCadenceId) =>
+          removeContactFromCadence(contactCadenceId)
+        )
+      );
+
+      // Reload contacts
+      const [cadenceContacts, allContacts] = await Promise.all([
+        fetchCadenceContacts(cadenceId),
+        fetchContacts(),
+      ]);
+
+      const contactMap = new Map();
+      allContacts.forEach((c) => {
+        contactMap.set(c.id, c);
+      });
+
+      // Use the same transformation logic as the main useEffect
+      const transformed = cadenceContacts.map((contact) => {
+        const fullContact = contactMap.get(contact.contact_id) || {};
+
+        // Override backend's current_step_order if it points to a step that's not day 0
+        let currentStepOrder = contact.current_step_order;
+
+        if (cadenceStructure.length > 0) {
+          const allSteps = cadenceStructure.flatMap((day) => day.actions);
+
+          const firstStep = allSteps.reduce((min, step) => {
+            if (!min) return step;
+            return step.day_number < min.day_number ? step : min;
+          }, null);
+
+          if (currentStepOrder === null) {
+            currentStepOrder = firstStep ? firstStep.step_order : null;
+          } else {
+            const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
+            if (currentStep && currentStep.day_number !== 0 && firstStep) {
+              currentStepOrder = firstStep.step_order;
+            }
+          }
+        }
+        let dueDate = null;
+        let currentStepLabel = "Not Started";
+        let personDayNumber = contact.day_number || null;
+
+        if (currentStepOrder !== null && cadenceStructure.length > 0) {
+          const allSteps = cadenceStructure.flatMap((day) => day.actions);
+          const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
+
+          if (currentStep) {
+            const dayNumber = currentStep.day_number;
+            personDayNumber = dayNumber;
+
+            const daySteps = cadenceStructure
+              .find((d) => d.day === dayNumber)?.actions || [];
+
+            if (daySteps.length > 1) {
+              currentStepLabel = `Day ${dayNumber}: Multi-Action`;
+            } else {
+              currentStepLabel = `Day ${dayNumber}: Step ${currentStep.label || "Unknown"}`;
+            }
+
+            const today = new Date();
+            const dueDateObj = new Date(today);
+            dueDateObj.setDate(today.getDate() + (dayNumber || 0));
+            dueDate = dueDateObj.toISOString().split("T")[0];
+          } else if (contact.step_label) {
+            currentStepLabel = contact.step_label;
+          }
+        } else if (contact.step_label) {
+          currentStepLabel = contact.step_label;
+        }
+
+        return {
+          id: contact.contact_cadence_id,
+          contactId: contact.contact_id,
+          company: fullContact.company || "—",
+          firstName: contact.first_name || "",
+          lastName: contact.last_name || "",
+          first_name: contact.first_name || "",
+          last_name: contact.last_name || "",
+          title: fullContact.title || "—",
+          email: fullContact.email || null,
+          mobile_phone: fullContact.mobile_phone || null,
+          phone: fullContact.mobile_phone || null,
+          linkedin_url: fullContact.linkedin_url || null,
+          tags: fullContact.tags || [],
+          currentStep: currentStepLabel,
+          dueOn: dueDate,
+          lastStepCompletedAt: null,
+          currentStepOrder: currentStepOrder,
+          dayNumber: personDayNumber,
+        };
+      });
+      setPeopleInCadence(transformed);
+      setSelectedContacts([]);
+      alert(`✅ ${selectedContacts.length} contact(s) removed from cadence.`);
+    } catch (err) {
+      console.error("Failed to remove contacts from cadence:", err);
+      alert("❌ Failed to remove contacts from cadence. Please try again.");
+    }
+  };
+
   const handleAddContact = async (contact) => {
     try {
       await addContactToCadence(cadenceId, contact.id);
@@ -865,7 +994,17 @@ export default function CadenceDetailPage() {
           }`}
         >
           {/* Add to Cadence Button */}
-          <div className="p-4 border-b flex justify-end">
+          <div className="p-4 border-b flex justify-end gap-2">
+            {selectedContacts.length > 0 && (
+              <Button
+                variant="destructive"
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700"
+                onClick={handleDeleteSelected}
+              >
+                <Trash2 className="h-4 w-4" />
+                Remove Selected ({selectedContacts.length})
+              </Button>
+            )}
             <Button
               onClick={() => setAddContactModalOpen(true)}
               className="bg-primary text-white"
@@ -878,6 +1017,17 @@ export default function CadenceDetailPage() {
             <table className="w-full text-sm text-left text-gray-700">
             <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
               <tr>
+                <th className="p-2 pl-4 w-[5%]">
+                  <input
+                    type="checkbox"
+                    checked={
+                      selectedContacts.length > 0 &&
+                      selectedContacts.length === peopleInCadence.length
+                    }
+                    onChange={toggleSelectAll}
+                    className="accent-blue-600 cursor-pointer"
+                  />
+                </th>
                 <th className="p-2 pl-4 text-left font-medium">Company</th>
                 <th className="p-2 text-left font-medium">Full Name</th>
                 <th className="p-2 text-left font-medium">Title</th>
@@ -894,24 +1044,36 @@ export default function CadenceDetailPage() {
             <tbody>
               {loadingContacts ? (
                 <tr>
-                  <td colSpan={selectedContact ? 4 : 7} className="p-8 text-center text-gray-500">
+                  <td colSpan={selectedContact ? 5 : 8} className="p-8 text-center text-gray-500">
                     Loading contacts...
                   </td>
                 </tr>
               ) : peopleInCadence.length === 0 ? (
                 <tr>
-                  <td colSpan={selectedContact ? 4 : 7} className="p-8 text-center text-gray-500">
+                  <td colSpan={selectedContact ? 5 : 8} className="p-8 text-center text-gray-500">
                     No contacts in this cadence yet. Click "Add to Cadence" to get started.
                   </td>
                 </tr>
               ) : (
                 peopleInCadence.map((person) => {
                 const pastDue = isPastDue(person.dueOn);
+                const isSelected = selectedContacts.includes(person.id);
                 return (
                   <tr
                     key={person.id}
-                    className="border-b hover:bg-gray-50 transition group"
+                    className={`border-b hover:bg-gray-50 transition group ${
+                      isSelected ? "bg-blue-50" : ""
+                    }`}
                   >
+                    <td className="p-2 pl-4">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(person.id)}
+                        className="accent-blue-600 cursor-pointer"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </td>
                     <td className="p-2 pl-4 font-medium text-gray-900 truncate max-w-[140px]">
                       {person.company}
                     </td>
