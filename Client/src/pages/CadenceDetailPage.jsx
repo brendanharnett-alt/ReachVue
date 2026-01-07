@@ -1,6 +1,6 @@
 // src/pages/CadenceDetailPage.jsx
-import React, { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useMemo } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import MultiActionModal from "@/components/modals/MultiActionModal";
 import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
+import AddStepModal from "@/components/modals/AddStepModal";
+import { fetchCadenceSteps, createCadenceStep } from "@/api";
 
 // Generate mock data with dates relative to today
 const generateMockPeople = () => {
@@ -212,19 +214,72 @@ function ensureActionIds(structure) {
 export default function CadenceDetailPage() {
   const { cadenceId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const cadenceName = getCadenceName(parseInt(cadenceId));
   const mockPeopleInCadence = generateMockPeople();
   const [multiActionModalOpen, setMultiActionModalOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [selectedContact, setSelectedContact] = useState(null);
-  const [activeTab, setActiveTab] = useState("people");
-  const [cadenceStructure, setCadenceStructure] = useState(() => {
-    const structure = generateCadenceStructure(parseInt(cadenceId));
-    return ensureActionIds(structure);
-  });
+  
+  // Check URL params for tab query param
+  const searchParams = new URLSearchParams(location.search);
+  const initialTab = searchParams.get("tab") || "people";
+  const [activeTab, setActiveTab] = useState(initialTab);
+  
+  const [cadenceStructure, setCadenceStructure] = useState([]);
+  const [loadingSteps, setLoadingSteps] = useState(true);
+  const [addStepModalOpen, setAddStepModalOpen] = useState(false);
+  const [addStepDayNumber, setAddStepDayNumber] = useState(0);
+  const [cadenceActionsOpen, setCadenceActionsOpen] = useState(false);
   const [draggedItem, setDraggedItem] = useState(null);
   const [draggedFromDay, setDraggedFromDay] = useState(null);
   const [dragOverDay, setDragOverDay] = useState(null);
+
+  // Sync tab state with URL params
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get("tab") || "people";
+    setActiveTab(tab);
+  }, [location.search]);
+
+  // Fetch cadence steps from backend
+  useEffect(() => {
+    const loadSteps = async () => {
+      if (!cadenceId) return;
+      setLoadingSteps(true);
+      try {
+        const steps = await fetchCadenceSteps(cadenceId);
+        // Transform backend data to match UI structure (group by day_number)
+        const groupedByDay = {};
+        steps.forEach((step) => {
+          const day = step.day_number || 0;
+          if (!groupedByDay[day]) {
+            groupedByDay[day] = {
+              day,
+              actions: [],
+            };
+          }
+          groupedByDay[day].actions.push({
+            id: step.id,
+            type: step.action_type || "task",
+            label: step.step_label,
+            step_order: step.step_order,
+            day_number: step.day_number,
+            action_value: step.action_value,
+          });
+        });
+        // Convert to array and sort by day
+        const structure = Object.values(groupedByDay).sort((a, b) => a.day - b.day);
+        setCadenceStructure(structure);
+      } catch (err) {
+        console.error("Failed to load cadence steps:", err);
+        setCadenceStructure([]);
+      } finally {
+        setLoadingSteps(false);
+      }
+    };
+    loadSteps();
+  }, [cadenceId]);
 
   // Mock actions for multi-action steps
   const getMultiActions = (personId) => {
@@ -375,13 +430,58 @@ export default function CadenceDetailPage() {
   };
 
   const handleAddStep = (dayIndex) => {
-    const newStructure = [...cadenceStructure];
-    newStructure[dayIndex].actions.push({
-      id: `action-${dayIndex}-${newStructure[dayIndex].actions.length}-${Date.now()}`,
-      type: "email",
-      label: "New Step",
-    });
-    setCadenceStructure(newStructure);
+    // Find the day number for this index
+    const dayNumber = cadenceStructure[dayIndex]?.day ?? 0;
+    setAddStepDayNumber(dayNumber);
+    setAddStepModalOpen(true);
+  };
+
+  const handleAddStepSuccess = async (formData) => {
+    try {
+      // Calculate step_order (next available order for this cadence)
+      const allSteps = cadenceStructure.flatMap((day) => day.actions);
+      const maxStepOrder = allSteps.length > 0 
+        ? Math.max(...allSteps.map((a) => a.step_order || 0))
+        : -1;
+      const nextStepOrder = maxStepOrder + 1;
+
+      // Create the step via API
+      await createCadenceStep(cadenceId, {
+        step_order: nextStepOrder,
+        day_number: formData.day_number,
+        step_label: formData.step_label,
+        action_type: formData.action_type,
+        action_value: null,
+      });
+
+      // Reload steps from backend
+      const steps = await fetchCadenceSteps(cadenceId);
+      const groupedByDay = {};
+      steps.forEach((step) => {
+        const day = step.day_number || 0;
+        if (!groupedByDay[day]) {
+          groupedByDay[day] = {
+            day,
+            actions: [],
+          };
+        }
+        groupedByDay[day].actions.push({
+          id: step.id,
+          type: step.action_type || "task",
+          label: step.step_label,
+          step_order: step.step_order,
+          day_number: step.day_number,
+          action_value: step.action_value,
+        });
+      });
+      const structure = Object.values(groupedByDay).sort((a, b) => a.day - b.day);
+      setCadenceStructure(structure);
+    } catch (err) {
+      console.error("Failed to create step:", err);
+      alert(err.message || "Failed to create step. Please try again.");
+      // Re-throw so modal doesn't close
+      throw err;
+    }
   };
 
   const handleEditAction = (dayIndex, actionIndex) => {
@@ -403,23 +503,40 @@ export default function CadenceDetailPage() {
     setCadenceStructure(newStructure);
   };
 
-  const handleCadenceAction = (action) => {
-    switch (action) {
-      case "addStep":
-        // Add step to day 0 by default
-        handleAddStep(0);
-        break;
-      case "editName":
-        // Placeholder - would open edit modal
-        console.log("Edit name/description");
-        break;
-      case "copy":
-        // Placeholder - would copy entire cadence
-        console.log("Copy cadence");
-        break;
-      default:
-        break;
+  const handleCadenceAction = (action, e) => {
+    // Close dropdown first
+    setCadenceActionsOpen(false);
+    // Prevent event propagation if event is provided
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
     }
+    // Use setTimeout to ensure dropdown closes before modal opens
+    setTimeout(() => {
+      switch (action) {
+        case "addStep":
+          // Add step to day 0 by default (find day 0 index or create)
+          const day0Index = cadenceStructure.findIndex((d) => d.day === 0);
+          if (day0Index >= 0) {
+            handleAddStep(day0Index);
+          } else {
+            // If day 0 doesn't exist, create it
+            setAddStepDayNumber(0);
+            setAddStepModalOpen(true);
+          }
+          break;
+        case "editName":
+          // Placeholder - would open edit modal
+          console.log("Edit name/description");
+          break;
+        case "copy":
+          // Placeholder - would copy entire cadence
+          console.log("Copy cadence");
+          break;
+        default:
+          break;
+      }
+    }, 50); // Small delay to ensure dropdown closes first
   };
 
   return (
@@ -448,7 +565,10 @@ export default function CadenceDetailPage() {
       {/* Tabs */}
       <div className="flex gap-6 border-b border-gray-200">
         <button
-          onClick={() => setActiveTab("people")}
+          onClick={() => {
+            setActiveTab("people");
+            navigate(`/cadences/${cadenceId}?tab=people`, { replace: true });
+          }}
           className={`pb-2 px-1 text-sm font-medium transition-colors ${
             activeTab === "people"
               ? "text-blue-600 border-b-2 border-blue-600"
@@ -458,7 +578,10 @@ export default function CadenceDetailPage() {
           People
         </button>
         <button
-          onClick={() => setActiveTab("structure")}
+          onClick={() => {
+            setActiveTab("structure");
+            navigate(`/cadences/${cadenceId}?tab=structure`, { replace: true });
+          }}
           className={`pb-2 px-1 text-sm font-medium transition-colors ${
             activeTab === "structure"
               ? "text-blue-600 border-b-2 border-blue-600"
@@ -643,7 +766,7 @@ export default function CadenceDetailPage() {
           <div className="p-6">
             {/* Header with Cadence Actions button */}
             <div className="flex justify-end mb-6">
-              <DropdownMenu>
+              <DropdownMenu open={cadenceActionsOpen} onOpenChange={setCadenceActionsOpen}>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="flex items-center gap-2">
                     Cadence Actions
@@ -651,7 +774,12 @@ export default function CadenceDetailPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem onClick={() => handleCadenceAction("addStep")}>
+                  <DropdownMenuItem 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCadenceAction("addStep", e);
+                    }}
+                  >
                     <Plus className="mr-2 h-4 w-4" />
                     Add Step
                   </DropdownMenuItem>
@@ -668,7 +796,16 @@ export default function CadenceDetailPage() {
             </div>
 
             <div className="space-y-6">
-              {cadenceStructure.map((step, dayIndex) => (
+              {loadingSteps ? (
+                <div className="text-center py-8 text-gray-500">
+                  Loading steps...
+                </div>
+              ) : cadenceStructure.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No steps yet. Click "Add Step" to create your first step.
+                </div>
+              ) : (
+                cadenceStructure.map((step, dayIndex) => (
                 <div
                   key={dayIndex}
                   className={`border-b border-gray-200 last:border-b-0 pb-6 last:pb-0 transition-colors ${
@@ -772,7 +909,8 @@ export default function CadenceDetailPage() {
                     </button>
                   </div>
                 </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -787,6 +925,14 @@ export default function CadenceDetailPage() {
           actions={getMultiActions(selectedPerson.id)}
         />
       )}
+
+      {/* Add Step Modal */}
+      <AddStepModal
+        open={addStepModalOpen}
+        onClose={() => setAddStepModalOpen(false)}
+        onSuccess={handleAddStepSuccess}
+        dayNumber={addStepDayNumber}
+      />
     </div>
   );
 }

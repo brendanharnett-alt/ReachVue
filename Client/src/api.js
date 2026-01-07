@@ -189,3 +189,38 @@ export async function createCadence({ name, description }) {
     throw err
   }
 }
+
+export async function fetchCadenceSteps(cadenceId) {
+  try {
+    const res = await fetch(`${BASE_URL}/cadences/${cadenceId}/steps`)
+    if (!res.ok) throw new Error("Failed to fetch cadence steps")
+    return await res.json()
+  } catch (err) {
+    console.error("Fetch cadence steps error:", err)
+    return []
+  }
+}
+
+export async function createCadenceStep(cadenceId, { step_order, day_number, step_label, action_type, action_value }) {
+  try {
+    const res = await fetch(`${BASE_URL}/cadences/${cadenceId}/steps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        step_order,
+        day_number: day_number || 0,
+        step_label,
+        action_type: action_type || 'task',
+        action_value: action_value || null,
+      }),
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || "Failed to create cadence step")
+    }
+    return await res.json()
+  } catch (err) {
+    console.error("Create cadence step error:", err)
+    throw err
+  }
+}

@@ -1078,6 +1078,37 @@ app.get('/cadences/:cadenceId/contacts', async (req, res) => {
   }
 });
 
+app.get('/cadences/:cadenceId/steps', async (req, res) => {
+  const { cadenceId } = req.params;
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        id,
+        cadence_id,
+        step_order,
+        day_number,
+        step_label,
+        action_type,
+        action_value,
+        is_active,
+        created_at,
+        updated_at
+      FROM cadence_steps
+      WHERE cadence_id = $1
+        AND is_active = true
+      ORDER BY step_order ASC
+      `,
+      [cadenceId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching cadence steps:', err);
+    res.status(500).send('Failed to fetch cadence steps');
+  }
+});
 
 
 

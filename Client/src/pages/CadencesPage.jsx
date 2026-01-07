@@ -214,13 +214,15 @@ export default function CadencesPage() {
 
   const handleCadenceCreated = async (cadenceData) => {
     try {
-      await createCadence({
+      const newCadence = await createCadence({
         name: cadenceData.name,
         description: cadenceData.description,
       });
       // Refresh cadences list
       const updatedCadences = await fetchCadences();
       setCadences(updatedCadences);
+      // Navigate to the cadence structure tab
+      navigate(`/cadences/${newCadence.id}?tab=structure`);
     } catch (err) {
       console.error("Failed to create cadence:", err);
       alert(err.message || "Failed to create cadence. Please try again.");
