@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Plus, MailCheck, Eye, Edit, Play, MoreVertical, History, SkipForward, Clock, ChevronRight, ChevronDown } from "lucide-react";
+import CreateCadenceModal from "@/components/modals/CreateCadenceModal";
 
 // Mock cadence data
 const mockCadences = [
@@ -165,6 +166,7 @@ export default function CadencesPage() {
   const [activeTab, setActiveTab] = useState("todo");
   const [groupBy, setGroupBy] = useState("none");
   const [expandedGroups, setExpandedGroups] = useState({});
+  const [createCadenceModalOpen, setCreateCadenceModalOpen] = useState(false);
   const toDoItems = generateToDoItems();
 
   const toggleGroupExpand = (group) =>
@@ -188,8 +190,13 @@ export default function CadencesPage() {
   const groupedItems = groupedData;
 
   const handleCreateCadence = () => {
-    // Placeholder - no implementation yet
-    console.log("Create cadence clicked");
+    setCreateCadenceModalOpen(true);
+  };
+
+  const handleCadenceCreated = (cadenceData) => {
+    // Placeholder - no backend wiring yet
+    console.log("Cadence created:", cadenceData);
+    // TODO: Add cadence to list, refresh data, etc.
   };
 
   const handleEdit = (cadenceId, e) => {
@@ -496,6 +503,13 @@ export default function CadencesPage() {
         </table>
       </div>
       )}
+
+      {/* Create Cadence Modal */}
+      <CreateCadenceModal
+        open={createCadenceModalOpen}
+        onClose={() => setCreateCadenceModalOpen(false)}
+        onSuccess={handleCadenceCreated}
+      />
     </div>
   );
 }
