@@ -857,6 +857,227 @@ app.put('/api/user/settings/email', async (req, res) => {
   }
 });
 
+// ----------------------
+// Cadences (Phase 1)
+// ----------------------
+
+app.post('/cadences', async (req, res) => {
+  const { name, description } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).send('Cadence name is required');
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      INSERT INTO cadences (name, description, created_at, updated_at)
+      VALUES ($1, $2, NOW(), NOW())
+      RETURNING *
+      `,
+      [name.trim(), description || null]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error creating cadence:', err);
+    res.status(500).send('Failed to create cadence');
+  }
+});
+
+app.get('/cadences', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM cadences ORDER BY created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching cadences:', err);
+    res.status(500).send('Failed to fetch cadences');
+  }
+});
+
+app.post('/cadences/:cadenceId/steps', async (req, res) => {
+  const { cadenceId } = req.params;
+  const { step_order, day_number, step_label, action_type, action_value } = req.body;
+
+  if (step_order == null || !step_label) {
+    return res.status(400).send('step_order and step_label are required');
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      INSERT INTO cadence_steps
+      (cadence_id, step_order, day_number, step_label, action_type, action_value)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+      `,
+      [
+        cadenceId,
+        step_order,
+        day_number || 0,
+        step_label,
+        action_type || 'task',
+        action_value || null
+      ]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error adding cadence step:', err);
+    res.status(500).send('Failed to add cadence step');
+  }
+});
+
+app.put('/cadence-steps/:stepId', async (req, res) => {
+  const { stepId } = req.params;
+  const { step_order, day_number, step_label, action_type, action_value, is_active } = req.body;
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE cadence_steps
+      SET
+        step_order = $1,
+        day_number = $2,
+        step_label = $3,
+        action_type = $4,
+        action_value = $5,
+        is_active = $6,
+        updated_at = NOW()
+      WHERE id = $7
+      RETURNING *
+      `,
+      [
+        step_order,
+        day_number,
+        step_label,
+        action_type,
+        action_value,
+        is_active !== undefined ? is_active : true,
+        stepId
+      ]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).send('Cadence step not found');
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating cadence step:', err);
+    res.status(500).send('Failed to update cadence step');
+  }
+});
+
+app.post('/cadences/:cadenceId/contacts', async (req, res) => {
+  const { cadenceId } = req.params;
+  const { contact_id } = req.body;
+
+  if (!contact_id) {
+    return res.status(400).send('contact_id is required');
+  }
+
+  try {
+    await pool.query(
+      `
+      INSERT INTO contact_cadences (contact_id, cadence_id)
+      VALUES ($1, $2)
+      ON CONFLICT DO NOTHING
+      `,
+      [contact_id, cadenceId]
+    );
+
+    res.sendStatus(201);
+  } catch (err) {
+    console.error('Error adding contact to cadence:', err);
+    res.status(500).send('Failed to add contact to cadence');
+  }
+});
+
+app.post('/cadences/:cadenceId/contacts/bulk', async (req, res) => {
+  const { cadenceId } = req.params;
+  const { contact_ids } = req.body;
+
+  if (!Array.isArray(contact_ids) || contact_ids.length === 0) {
+    return res.status(400).send('contact_ids array is required');
+  }
+
+  try {
+    await pool.query(
+      `
+      INSERT INTO contact_cadences (contact_id, cadence_id)
+      SELECT unnest($1::int[]), $2
+      ON CONFLICT DO NOTHING
+      `,
+      [contact_ids, cadenceId]
+    );
+
+    res.sendStatus(201);
+  } catch (err) {
+    console.error('Error bulk adding contacts to cadence:', err);
+    res.status(500).send('Failed to bulk add contacts');
+  }
+});
+
+app.delete('/contact-cadences/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE contact_cadences
+      SET ended_at = NOW()
+      WHERE id = $1 AND ended_at IS NULL
+      `,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).send('Active contact cadence not found');
+    }
+
+    res.send('Contact removed from cadence');
+  } catch (err) {
+    console.error('Error removing contact from cadence:', err);
+    res.status(500).send('Failed to remove contact from cadence');
+  }
+});
+
+app.get('/cadences/:cadenceId/contacts', async (req, res) => {
+  const { cadenceId } = req.params;
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        cc.id AS contact_cadence_id,
+        c.id AS contact_id,
+        c.first_name,
+        c.last_name,
+        cc.current_step_order,
+        cs.step_label,
+        cs.day_number
+      FROM contact_cadences cc
+      JOIN contacts c ON c.id = cc.contact_id
+      LEFT JOIN cadence_steps cs
+        ON cs.cadence_id = cc.cadence_id
+       AND cs.step_order = cc.current_step_order
+      WHERE cc.cadence_id = $1
+        AND cc.ended_at IS NULL
+      ORDER BY c.last_name, c.first_name
+      `,
+      [cadenceId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching cadence contacts:', err);
+    res.status(500).send('Failed to fetch cadence contacts');
+  }
+});
+
 
 
 
