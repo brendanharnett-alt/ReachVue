@@ -1,5 +1,5 @@
 // src/pages/CadencesPage.jsx
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Plus, MailCheck, Eye, Edit, Play, MoreVertical, History, SkipForward, Clock, ChevronRight, ChevronDown } from "lucide-react";
 import CreateCadenceModal from "@/components/modals/CreateCadenceModal";
+import { fetchCadences, createCadence } from "@/api";
 
 // Mock cadence data
 const mockCadences = [
@@ -167,7 +168,25 @@ export default function CadencesPage() {
   const [groupBy, setGroupBy] = useState("none");
   const [expandedGroups, setExpandedGroups] = useState({});
   const [createCadenceModalOpen, setCreateCadenceModalOpen] = useState(false);
+  const [cadences, setCadences] = useState([]);
+  const [loadingCadences, setLoadingCadences] = useState(false);
   const toDoItems = generateToDoItems();
+
+  // Fetch cadences from backend
+  useEffect(() => {
+    const loadCadences = async () => {
+      setLoadingCadences(true);
+      try {
+        const data = await fetchCadences();
+        setCadences(data);
+      } catch (err) {
+        console.error("Failed to load cadences:", err);
+      } finally {
+        setLoadingCadences(false);
+      }
+    };
+    loadCadences();
+  }, []);
 
   const toggleGroupExpand = (group) =>
     setExpandedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
@@ -193,10 +212,19 @@ export default function CadencesPage() {
     setCreateCadenceModalOpen(true);
   };
 
-  const handleCadenceCreated = (cadenceData) => {
-    // Placeholder - no backend wiring yet
-    console.log("Cadence created:", cadenceData);
-    // TODO: Add cadence to list, refresh data, etc.
+  const handleCadenceCreated = async (cadenceData) => {
+    try {
+      await createCadence({
+        name: cadenceData.name,
+        description: cadenceData.description,
+      });
+      // Refresh cadences list
+      const updatedCadences = await fetchCadences();
+      setCadences(updatedCadences);
+    } catch (err) {
+      console.error("Failed to create cadence:", err);
+      alert(err.message || "Failed to create cadence. Please try again.");
+    }
   };
 
   const handleEdit = (cadenceId, e) => {
@@ -448,57 +476,67 @@ export default function CadencesPage() {
             </tr>
           </thead>
           <tbody>
-            {mockCadences.map((cadence) => (
-              <tr
-                key={cadence.id}
-                className="border-b hover:bg-gray-50 transition cursor-pointer"
-                onClick={() => handleRowClick(cadence.id)}
-              >
-                <td className="px-4 py-3 font-medium text-blue-600 hover:underline">
-                  {cadence.name}
-                </td>
-                <td className="px-4 py-3 text-gray-600">
-                  {cadence.description || (
-                    <span className="italic text-gray-400">—</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-gray-700">{cadence.peopleCount}</td>
-                <td className="px-4 py-3 text-gray-600">{cadence.lastActivity}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      cadence.status === "Active"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-gray-100 text-gray-800"
-                    }`}
-                  >
-                    {cadence.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2"
-                      onClick={(e) => handleView(cadence.id, e)}
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      View
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2"
-                      onClick={(e) => handleEdit(cadence.id, e)}
-                    >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Edit
-                    </Button>
-                  </div>
+            {loadingCadences ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-3 text-center text-gray-500">
+                  Loading cadences...
                 </td>
               </tr>
-            ))}
+            ) : cadences.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-3 text-center text-gray-500">
+                  No cadences found. Create your first cadence to get started.
+                </td>
+              </tr>
+            ) : (
+              cadences.map((cadence) => (
+                <tr
+                  key={cadence.id}
+                  className="border-b hover:bg-gray-50 transition cursor-pointer"
+                  onClick={() => handleRowClick(cadence.id)}
+                >
+                  <td className="px-4 py-3 font-medium text-blue-600 hover:underline">
+                    {cadence.name}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">
+                    {cadence.description || (
+                      <span className="italic text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-gray-700">
+                    <span className="text-gray-400">—</span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">
+                    <span className="text-gray-400">—</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-gray-400">—</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={(e) => handleView(cadence.id, e)}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={(e) => handleEdit(cadence.id, e)}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

@@ -139,3 +139,53 @@ export async function signLink(email_id, original_url, link_index) {
     throw err
   }
 }
+
+// ----------------------
+// CADENCES
+// ----------------------
+
+export async function fetchCadences() {
+  try {
+    const res = await fetch(`${BASE_URL}/cadences`)
+    if (!res.ok) throw new Error("Failed to fetch cadences")
+    return await res.json()
+  } catch (err) {
+    console.error("Fetch cadences error:", err)
+    return []
+  }
+}
+
+export async function createCadence({ name, description }) {
+  try {
+    const res = await fetch(`${BASE_URL}/cadences`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description }),
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      // Handle 404 specifically - likely means server needs restart
+      if (res.status === 404) {
+        throw new Error("Cadence endpoint not found. Please ensure the backend server is running and has been restarted to register the /cadences route.")
+      }
+      // Try to parse JSON error, otherwise use text
+      let errorMessage = "Failed to create cadence"
+      try {
+        const errorJson = JSON.parse(errorText)
+        errorMessage = errorJson.message || errorMessage
+      } catch {
+        // If errorText contains HTML (like Express error page), provide a generic message
+        if (errorText.includes("<!DOCTYPE") || errorText.includes("Cannot POST")) {
+          errorMessage = "Server error: The cadence endpoint may not be registered. Please ensure the backend server is running and has been restarted."
+        } else {
+          errorMessage = errorText || errorMessage
+        }
+      }
+      throw new Error(errorMessage)
+    }
+    return await res.json()
+  } catch (err) {
+    console.error("Create cadence error:", err)
+    throw err
+  }
+}
