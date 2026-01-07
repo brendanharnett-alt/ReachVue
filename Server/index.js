@@ -966,8 +966,8 @@ app.post('/cadences/:cadenceId/contacts', async (req, res) => {
   try {
     await pool.query(
       `
-      INSERT INTO contact_cadences (contact_id, cadence_id)
-      VALUES ($1, $2)
+      INSERT INTO contact_cadences (contact_id, cadence_id, current_step_order)
+      VALUES ($1, $2, 0)
       ON CONFLICT DO NOTHING
       `,
       [contact_id, cadenceId]
@@ -991,8 +991,8 @@ app.post('/cadences/:cadenceId/contacts/bulk', async (req, res) => {
   try {
     await pool.query(
       `
-      INSERT INTO contact_cadences (contact_id, cadence_id)
-      SELECT unnest($1::int[]), $2
+      INSERT INTO contact_cadences (contact_id, cadence_id, current_step_order)
+      SELECT unnest($1::int[]), $2, 0
       ON CONFLICT DO NOTHING
       `,
       [contact_ids, cadenceId]

@@ -305,32 +305,93 @@ export default function CadenceDetailPage() {
         const transformed = cadenceContacts.map((contact) => {
           const fullContact = contactMap.get(contact.contact_id) || {};
           
+          // #region agent log
+          console.log('[DEBUG] Contact data from backend', {contact_id:contact.contact_id,current_step_order:contact.current_step_order,day_number:contact.day_number,step_label:contact.step_label,cadenceStructureLength:cadenceStructure.length});
+          // #endregion
+          
           // Calculate due date based on current step's day_number
-          const currentStepOrder = contact.current_step_order;
+          // Override backend's current_step_order if it points to a step that's not day 0
+          // The backend incorrectly sets current_step_order to non-zero values for new contacts
+          let currentStepOrder = contact.current_step_order;
+          
+          // #region agent log
+          console.log('[DEBUG] Before first step calculation', {currentStepOrder,isNull:currentStepOrder===null,cadenceStructureLength:cadenceStructure.length});
+          // #endregion
+          
+          if (cadenceStructure.length > 0) {
+            const allSteps = cadenceStructure.flatMap((day) => day.actions);
+            
+            // #region agent log
+            console.log('[DEBUG] All steps from cadenceStructure', {allStepsCount:allSteps.length,allSteps:allSteps.map(s=>({step_order:s.step_order,day_number:s.day_number,label:s.label}))});
+            // #endregion
+            
+            // Find the step with the minimum day_number (day 0)
+            const firstStep = allSteps.reduce((min, step) => {
+              if (!min) return step;
+              return step.day_number < min.day_number ? step : min;
+            }, null);
+            
+            // #region agent log
+            console.log('[DEBUG] First step found', {firstStep:firstStep?{step_order:firstStep.step_order,day_number:firstStep.day_number,label:firstStep.label}:null});
+            // #endregion
+            
+            // If current_step_order is NULL, or if it points to a step that's not day 0, use the first step
+            if (currentStepOrder === null) {
+              currentStepOrder = firstStep ? firstStep.step_order : null;
+            } else {
+              // Check if the current step is day 0 - if not, override to day 0
+              const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
+              if (currentStep && currentStep.day_number !== 0 && firstStep) {
+                // #region agent log
+                console.log('[DEBUG] Overriding current_step_order - backend set to day', currentStep.day_number, 'but should be day 0');
+                // #endregion
+                currentStepOrder = firstStep.step_order;
+              }
+            }
+          }
           let dueDate = null;
           let currentStepLabel = "Not Started";
+          
+          let personDayNumber = contact.day_number || null;
           
           if (currentStepOrder !== null && cadenceStructure.length > 0) {
             // Find the step with matching step_order
             const allSteps = cadenceStructure.flatMap((day) => day.actions);
             const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
             
+            // #region agent log
+            console.log('[DEBUG] Current step lookup', {currentStepOrder,currentStep:currentStep?{step_order:currentStep.step_order,day_number:currentStep.day_number,label:currentStep.label}:null});
+            // #endregion
+            
             if (currentStep) {
-              // Check if this step has multiple actions on the same day (multi-step)
-              const daySteps = cadenceStructure
-                .find((d) => d.day === currentStep.day_number)?.actions || [];
-              const sameDaySteps = daySteps.filter((s) => s.step_order === currentStepOrder);
+              // Use day_number from the current step (more reliable than contact.day_number)
+              const dayNumber = currentStep.day_number;
+              personDayNumber = dayNumber;
               
-              if (sameDaySteps.length > 1 || currentStep.label.toLowerCase().includes("multi")) {
-                currentStepLabel = `Step ${currentStepOrder + 1}: Multi-Action`;
+              // Check if there are multiple actions on the same day_number (multi-step)
+              const daySteps = cadenceStructure
+                .find((d) => d.day === dayNumber)?.actions || [];
+              
+              // #region agent log
+              console.log('[DEBUG] Day steps check', {dayNumber,dayStepsCount:daySteps.length,daySteps:daySteps.map(s=>({step_order:s.step_order,label:s.label}))});
+              // #endregion
+              
+              // If there are multiple actions on the same day, it's a multi-action step
+              if (daySteps.length > 1) {
+                currentStepLabel = `Day ${dayNumber}: Multi-Action`;
               } else {
-                currentStepLabel = `Step ${currentStepOrder + 1}: ${currentStep.label}`;
+                // Format: "Day N: Step <NAME>"
+                currentStepLabel = `Day ${dayNumber}: Step ${currentStep.label || "Unknown"}`;
               }
+              
+              // #region agent log
+              console.log('[DEBUG] Final step label', {currentStepLabel,dayNumber,personDayNumber});
+              // #endregion
               
               // Calculate due date: today + day_number (simplified - in real app would track join date)
               const today = new Date();
               const dueDateObj = new Date(today);
-              dueDateObj.setDate(today.getDate() + (currentStep.day_number || 0));
+              dueDateObj.setDate(today.getDate() + (dayNumber || 0));
               dueDate = dueDateObj.toISOString().split("T")[0];
             } else if (contact.step_label) {
               currentStepLabel = contact.step_label;
@@ -357,7 +418,7 @@ export default function CadenceDetailPage() {
             dueOn: dueDate,
             lastStepCompletedAt: null, // Backend doesn't provide this yet
             currentStepOrder: currentStepOrder,
-            dayNumber: contact.day_number,
+            dayNumber: personDayNumber,
           };
         });
         setPeopleInCadence(transformed);
@@ -374,25 +435,25 @@ export default function CadenceDetailPage() {
     }
   }, [cadenceId, cadenceStructure, loadingSteps]);
 
-  // Mock actions for multi-action steps
-  const getMultiActions = (personId) => {
-    return [
-      {
-        id: 1,
-        name: "Send Email",
-        dueOn: null,
-      },
-      {
-        id: 2,
-        name: "Phone Call",
-        dueOn: null,
-      },
-      {
-        id: 3,
-        name: "LinkedIn Message",
-        dueOn: null,
-      },
-    ];
+  // Get real actions for multi-action steps from cadence structure
+  const getMultiActions = (person) => {
+    if (!person || !person.dayNumber) {
+      return [];
+    }
+    
+    // Find the day in cadence structure that matches the person's day number
+    const dayData = cadenceStructure.find((d) => d.day === person.dayNumber);
+    if (!dayData || !dayData.actions || dayData.actions.length === 0) {
+      return [];
+    }
+    
+    // Return the actions for this day
+    return dayData.actions.map((action) => ({
+      id: action.id,
+      name: action.label || action.type || "Unknown",
+      dueOn: person.dueOn || null,
+      type: action.type,
+    }));
   };
 
   const handleOpenMultiActionModal = (person) => {
@@ -635,7 +696,7 @@ export default function CadenceDetailPage() {
   const handleAddContact = async (contact) => {
     try {
       await addContactToCadence(cadenceId, contact.id);
-      // Reload contacts
+      // Reload contacts using the same logic as the main useEffect
       const [cadenceContacts, allContacts] = await Promise.all([
         fetchCadenceContacts(cadenceId),
         fetchContacts(),
@@ -646,30 +707,66 @@ export default function CadenceDetailPage() {
         contactMap.set(c.id, c);
       });
       
-      const transformed = cadenceContacts.map((contact) => {
-        const fullContact = contactMap.get(contact.contact_id) || {};
-        const currentStepOrder = contact.current_step_order;
+        // Use the same transformation logic as the main useEffect
+        const transformed = cadenceContacts.map((contact) => {
+          const fullContact = contactMap.get(contact.contact_id) || {};
+          
+          // Override backend's current_step_order if it points to a step that's not day 0
+          // The backend incorrectly sets current_step_order to non-zero values for new contacts
+          let currentStepOrder = contact.current_step_order;
+          
+          if (cadenceStructure.length > 0) {
+            const allSteps = cadenceStructure.flatMap((day) => day.actions);
+            
+            // Find the step with the minimum day_number (day 0)
+            const firstStep = allSteps.reduce((min, step) => {
+              if (!min) return step;
+              return step.day_number < min.day_number ? step : min;
+            }, null);
+            
+            // If current_step_order is NULL, or if it points to a step that's not day 0, use the first step
+            if (currentStepOrder === null) {
+              currentStepOrder = firstStep ? firstStep.step_order : null;
+            } else {
+              // Check if the current step is day 0 - if not, override to day 0
+              const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
+              if (currentStep && currentStep.day_number !== 0 && firstStep) {
+                // Override: backend set to wrong day, force to day 0
+                currentStepOrder = firstStep.step_order;
+              }
+            }
+          }
+        
         let dueDate = null;
         let currentStepLabel = "Not Started";
+        let personDayNumber = contact.day_number || null;
         
         if (currentStepOrder !== null && cadenceStructure.length > 0) {
+          // Find the step with matching step_order
           const allSteps = cadenceStructure.flatMap((day) => day.actions);
           const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
           
           if (currentStep) {
-            const daySteps = cadenceStructure
-              .find((d) => d.day === currentStep.day_number)?.actions || [];
-            const sameDaySteps = daySteps.filter((s) => s.step_order === currentStepOrder);
+            // Use day_number from the current step (more reliable than contact.day_number)
+            const dayNumber = currentStep.day_number;
+            personDayNumber = dayNumber;
             
-            if (sameDaySteps.length > 1 || currentStep.label.toLowerCase().includes("multi")) {
-              currentStepLabel = `Step ${currentStepOrder + 1}: Multi-Action`;
+            // Check if there are multiple actions on the same day_number (multi-step)
+            const daySteps = cadenceStructure
+              .find((d) => d.day === dayNumber)?.actions || [];
+            
+            // If there are multiple actions on the same day, it's a multi-action step
+            if (daySteps.length > 1) {
+              currentStepLabel = `Day ${dayNumber}: Multi-Action`;
             } else {
-              currentStepLabel = `Step ${currentStepOrder + 1}: ${currentStep.label}`;
+              // Format: "Day N: Step <NAME>"
+              currentStepLabel = `Day ${dayNumber}: Step ${currentStep.label || "Unknown"}`;
             }
             
+            // Calculate due date: today + day_number (simplified - in real app would track join date)
             const today = new Date();
             const dueDateObj = new Date(today);
-            dueDateObj.setDate(today.getDate() + (currentStep.day_number || 0));
+            dueDateObj.setDate(today.getDate() + (dayNumber || 0));
             dueDate = dueDateObj.toISOString().split("T")[0];
           } else if (contact.step_label) {
             currentStepLabel = contact.step_label;
@@ -696,7 +793,7 @@ export default function CadenceDetailPage() {
           dueOn: dueDate,
           lastStepCompletedAt: null,
           currentStepOrder: currentStepOrder,
-          dayNumber: contact.day_number,
+          dayNumber: personDayNumber,
         };
       });
       setPeopleInCadence(transformed);
@@ -761,9 +858,9 @@ export default function CadenceDetailPage() {
 
       {/* People Tab Content */}
       {activeTab === "people" && (
-        <div className="flex">
+        <div className="flex w-full">
         <div
-          className={`border rounded-lg bg-white shadow-sm overflow-hidden ${
+          className={`border rounded-lg bg-white shadow-sm overflow-x-auto ${
             selectedContact ? "w-2/3" : "w-full"
           }`}
         >
@@ -781,7 +878,7 @@ export default function CadenceDetailPage() {
             <table className="w-full text-sm text-left text-gray-700">
             <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
               <tr>
-                <th className="p-2 text-left font-medium">Company</th>
+                <th className="p-2 pl-4 text-left font-medium">Company</th>
                 <th className="p-2 text-left font-medium">Full Name</th>
                 <th className="p-2 text-left font-medium">Title</th>
                 <th className="p-2 text-left font-medium">Current Step</th>
@@ -815,7 +912,7 @@ export default function CadenceDetailPage() {
                     key={person.id}
                     className="border-b hover:bg-gray-50 transition group"
                   >
-                    <td className="p-2 font-medium text-gray-900 truncate max-w-[140px]">
+                    <td className="p-2 pl-4 font-medium text-gray-900 truncate max-w-[140px]">
                       {person.company}
                     </td>
                     <td className="p-2 text-gray-700">
@@ -1113,7 +1210,7 @@ export default function CadenceDetailPage() {
           open={multiActionModalOpen}
           onOpenChange={setMultiActionModalOpen}
           person={selectedPerson}
-          actions={getMultiActions(selectedPerson.id)}
+          actions={selectedPerson ? getMultiActions(selectedPerson) : []}
         />
       )}
 
