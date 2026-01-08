@@ -881,55 +881,24 @@ app.get('/cadences', async (req, res) => {
 app.delete('/cadences/:cadenceId', async (req, res) => {
   const { cadenceId } = req.params;
   
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:881',message:'DELETE /cadences/:cadenceId called',data:{cadenceId,method:req.method,url:req.url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
-  console.log('[DEBUG] DELETE /cadences/:cadenceId called', { cadenceId, method: req.method, url: req.url });
-  
   let client;
   try {
     client = await pool.connect();
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:887',message:'Client connected successfully',data:{cadenceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    console.log('[DEBUG] Client connected', { cadenceId });
   } catch (connectErr) {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:891',message:'Failed to get client from pool',data:{cadenceId,error:connectErr.message,code:connectErr.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    console.error('[DEBUG] Failed to get client from pool', { cadenceId, error: connectErr.message, stack: connectErr.stack });
+    console.error('Failed to get client from pool:', connectErr);
     return res.status(500).send('Failed to connect to database');
   }
 
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:896',message:'Starting transaction BEGIN',data:{cadenceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     await client.query('BEGIN');
-    console.log('[DEBUG] Transaction BEGIN', { cadenceId });
 
-    // 1. Mark cadence as inactive
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:900',message:'Executing cadence UPDATE query',data:{cadenceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
-    console.log('[DEBUG] Updating cadence to inactive', { cadenceId });
     // Check if cadence exists
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:915',message:'Checking cadence existence',data:{cadenceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     const checkResult = await client.query(
       `SELECT id, is_active FROM cadences WHERE id = $1`,
       [cadenceId]
     );
 
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:921',message:'Cadence check result',data:{cadenceId,exists:checkResult.rowCount>0,isActive:checkResult.rows[0]?.is_active},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-
     if (checkResult.rowCount === 0) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:925',message:'Cadence not found',data:{cadenceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       await client.query('ROLLBACK');
       return res.status(404).json({ success: false, message: 'Cadence not found' });
     }
@@ -938,9 +907,8 @@ app.delete('/cadences/:cadenceId', async (req, res) => {
     
     // Update cadence only if it's active or NULL (newly added column)
     // If already inactive, skip update but still process contact memberships (idempotent)
-    let cadenceUpdated = false;
     if (currentIsActive) {
-      const cadenceResult = await client.query(
+      await client.query(
         `
         UPDATE cadences
         SET is_active = false,
@@ -950,24 +918,10 @@ app.delete('/cadences/:cadenceId', async (req, res) => {
         `,
         [cadenceId]
       );
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:944',message:'Cadence UPDATE result',data:{cadenceId,rowCount:cadenceResult.rowCount,rows:cadenceResult.rows},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
-      console.log('[DEBUG] Cadence update result', { cadenceId, rowCount: cadenceResult.rowCount, rows: cadenceResult.rows });
-      cadenceUpdated = cadenceResult.rowCount > 0;
-    } else {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:955',message:'Cadence already inactive, skipping update',data:{cadenceId,isActive:checkResult.rows[0].is_active},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-      console.log('[DEBUG] Cadence already inactive, skipping update', { cadenceId, isActive: checkResult.rows[0].is_active });
     }
 
-    // 2. End all active contact memberships
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:924',message:'Executing contact_cadences UPDATE query',data:{cadenceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
-    console.log('[DEBUG] Ending contact memberships', { cadenceId });
-    const contactResult = await client.query(
+    // End all active contact memberships
+    await client.query(
       `
       UPDATE contact_cadences
       SET ended_at = NOW()
@@ -977,52 +931,22 @@ app.delete('/cadences/:cadenceId', async (req, res) => {
       [cadenceId]
     );
 
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:934',message:'Contact memberships UPDATE result',data:{cadenceId,rowCount:contactResult.rowCount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
-    console.log('[DEBUG] Contact memberships updated', { cadenceId, rowCount: contactResult.rowCount });
-
     await client.query('COMMIT');
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:938',message:'Transaction COMMIT successful',data:{cadenceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    console.log('[DEBUG] Transaction COMMIT successful', { cadenceId });
 
     res.json({ success: true, message: 'Cadence deleted' });
   } catch (err) {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:943',message:'Error in DELETE cadence handler',data:{cadenceId,error:err.message,code:err.code,detail:err.detail,constraint:err.constraint},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
-    console.error('[DEBUG] Error in DELETE cadence handler', { 
-      cadenceId, 
-      error: err.message, 
-      stack: err.stack,
-      code: err.code,
-      detail: err.detail
-    });
     try {
       if (client) {
         await client.query('ROLLBACK');
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:951',message:'Rollback successful',data:{cadenceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-        console.log('[DEBUG] Rollback successful', { cadenceId });
       }
     } catch (rollbackErr) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:954',message:'Rollback error',data:{cadenceId,error:rollbackErr.message,code:rollbackErr.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
-      console.error('[DEBUG] Rollback error', { cadenceId, error: rollbackErr.message, stack: rollbackErr.stack });
+      console.error('Rollback error:', rollbackErr);
     }
     console.error('Error deleting cadence:', err);
     res.status(500).send(`Failed to delete cadence: ${err.message}`);
   } finally {
     if (client) {
       client.release();
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:962',message:'Client released',data:{cadenceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      console.log('[DEBUG] Client released', { cadenceId });
     }
   }
 });
@@ -1098,6 +1022,26 @@ app.put('/cadence-steps/:stepId', async (req, res) => {
   } catch (err) {
     console.error('Error updating cadence step:', err);
     res.status(500).send('Failed to update cadence step');
+  }
+});
+
+app.delete('/cadence-steps/:stepId', async (req, res) => {
+  const { stepId } = req.params;
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM cadence_steps WHERE id = $1`,
+      [stepId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).send('Cadence step not found');
+    }
+
+    res.json({ success: true, message: 'Cadence step deleted' });
+  } catch (err) {
+    console.error('Error deleting cadence step:', err);
+    res.status(500).send('Failed to delete cadence step');
   }
 });
 

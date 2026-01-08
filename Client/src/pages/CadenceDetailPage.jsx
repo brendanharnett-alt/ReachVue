@@ -28,7 +28,7 @@ import MultiActionModal from "@/components/modals/MultiActionModal";
 import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
 import AddStepModal from "@/components/modals/AddStepModal";
 import AddContactToCadenceModal from "@/components/modals/AddContactToCadenceModal";
-import { fetchCadenceSteps, createCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts, removeContactFromCadence } from "@/api";
+import { fetchCadenceSteps, createCadenceStep, deleteCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts, removeContactFromCadence } from "@/api";
 
 // Generate mock data with dates relative to today
 const generateMockPeople = () => {
@@ -705,10 +705,47 @@ export default function CadenceDetailPage() {
     setCadenceStructure(newStructure);
   };
 
-  const handleDeleteAction = (dayIndex, actionIndex) => {
-    const newStructure = [...cadenceStructure];
-    newStructure[dayIndex].actions.splice(actionIndex, 1);
-    setCadenceStructure(newStructure);
+  const handleDeleteAction = async (dayIndex, actionIndex) => {
+    const action = cadenceStructure[dayIndex]?.actions[actionIndex];
+    if (!action || !action.id) {
+      console.error("Cannot delete: action or action.id is missing", { action, dayIndex, actionIndex });
+      return;
+    }
+
+    if (!window.confirm(`Delete step "${action.label}"?`)) {
+      return;
+    }
+
+    try {
+      await deleteCadenceStep(action.id);
+      // Refresh the cadence steps from the backend
+      const steps = await fetchCadenceSteps(cadenceId);
+      // Transform backend data to match UI structure (group by day_number)
+      const groupedByDay = {};
+      steps.forEach((step) => {
+        const day = step.day_number || 0;
+        if (!groupedByDay[day]) {
+          groupedByDay[day] = {
+            day,
+            actions: [],
+          };
+        }
+        groupedByDay[day].actions.push({
+          id: step.id,
+          type: step.action_type || "task",
+          label: step.step_label,
+          step_order: step.step_order,
+          day_number: step.day_number,
+          action_value: step.action_value,
+        });
+      });
+      // Convert to array and sort by day
+      const structure = Object.values(groupedByDay).sort((a, b) => a.day - b.day);
+      setCadenceStructure(structure);
+    } catch (err) {
+      console.error("Failed to delete cadence step:", err);
+      alert(`Failed to delete step: ${err.message || "Please try again."}`);
+    }
   };
 
   const handleCadenceAction = (action, e) => {

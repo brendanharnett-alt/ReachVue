@@ -225,6 +225,27 @@ export async function createCadenceStep(cadenceId, { step_order, day_number, ste
   }
 }
 
+export async function deleteCadenceStep(stepId) {
+  try {
+    const res = await fetch(`${BASE_URL}/cadence-steps/${stepId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || "Failed to delete cadence step")
+    }
+    const contentType = res.headers.get("content-type")
+    if (contentType && contentType.includes("application/json")) {
+      return await res.json()
+    }
+    return { success: true }
+  } catch (err) {
+    console.error("Delete cadence step error:", err)
+    throw err
+  }
+}
+
 export async function fetchCadenceContacts(cadenceId) {
   try {
     const res = await fetch(`${BASE_URL}/cadences/${cadenceId}/contacts`)
