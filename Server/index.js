@@ -1094,5 +1094,51 @@ app.get('/cadences/:cadenceId/steps', async (req, res) => {
   }
 });
 
+app.delete('/cadences/:cadenceId', async (req, res) => {
+  const { cadenceId } = req.params;
+
+  try {
+    await pool.query('BEGIN');
+
+    // 1. Mark cadence as inactive
+    const cadenceResult = await pool.query(
+      `
+      UPDATE cadences
+      SET is_active = false,
+          updated_at = NOW()
+      WHERE id = $1
+        AND is_active = true
+      RETURNING id
+      `,
+      [cadenceId]
+    );
+
+    if (cadenceResult.rowCount === 0) {
+      await pool.query('ROLLBACK');
+      return res.status(404).send('Active cadence not found');
+    }
+
+    // 2. End all active contact memberships
+    await pool.query(
+      `
+      UPDATE contact_cadences
+      SET ended_at = NOW()
+      WHERE cadence_id = $1
+        AND ended_at IS NULL
+      `,
+      [cadenceId]
+    );
+
+    await pool.query('COMMIT');
+
+    res.send({ success: true, message: 'Cadence deleted' });
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    console.error('Error deleting cadence:', err);
+    res.status(500).send('Failed to delete cadence');
+  }
+});
+
+
 
 

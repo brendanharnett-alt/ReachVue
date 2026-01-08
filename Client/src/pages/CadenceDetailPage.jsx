@@ -438,22 +438,39 @@ export default function CadenceDetailPage() {
 
   // Get real actions for multi-action steps from cadence structure
   const getMultiActions = (person) => {
-    if (!person || !person.dayNumber) {
+    if (!person) {
       return [];
     }
     
-    // Find the day in cadence structure that matches the person's day number
-    const dayData = cadenceStructure.find((d) => d.day === person.dayNumber);
+    // Get day number from person object
+    let dayNumber = person.dayNumber;
+    
+    // If dayNumber is not set, try to get it from currentStepOrder
+    if ((dayNumber === null || dayNumber === undefined) && person.currentStepOrder !== null && person.currentStepOrder !== undefined && cadenceStructure.length > 0) {
+      const allSteps = cadenceStructure.flatMap((day) => day.actions);
+      const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+      if (currentStep) {
+        dayNumber = currentStep.day_number;
+      }
+    }
+    
+    if (dayNumber === null || dayNumber === undefined) {
+      return [];
+    }
+    
+    // Find the day in cadence structure that matches the day number
+    const dayData = cadenceStructure.find((d) => d.day === dayNumber);
     if (!dayData || !dayData.actions || dayData.actions.length === 0) {
       return [];
     }
     
-    // Return the actions for this day
+    // Return ALL actions for this day (not just the current step)
     return dayData.actions.map((action) => ({
       id: action.id,
       name: action.label || action.type || "Unknown",
       dueOn: person.dueOn || null,
       type: action.type,
+      step_order: action.step_order,
     }));
   };
 
@@ -464,7 +481,25 @@ export default function CadenceDetailPage() {
 
   const handleExecuteAction = (person, e) => {
     e.stopPropagation();
-    if (person.currentStep.includes("Multi-Action")) {
+    // Open modal for any step - it will show all steps for that day
+    // First, we need to determine the day number from the current step
+    if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && cadenceStructure.length > 0) {
+      const allSteps = cadenceStructure.flatMap((day) => day.actions);
+      const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+      if (currentStep) {
+        // Create a person object with the correct dayNumber for the modal
+        const personWithDay = {
+          ...person,
+          dayNumber: currentStep.day_number
+        };
+        handleOpenMultiActionModal(personWithDay);
+      } else {
+        // Fallback: use person's dayNumber if available
+        if (person.dayNumber !== null && person.dayNumber !== undefined) {
+          handleOpenMultiActionModal(person);
+        }
+      }
+    } else if (person.dayNumber !== null && person.dayNumber !== undefined) {
       handleOpenMultiActionModal(person);
     } else {
       // Placeholder - no implementation yet
@@ -473,7 +508,25 @@ export default function CadenceDetailPage() {
   };
 
   const handleStepTextClick = (person) => {
-    if (person.currentStep.includes("Multi-Action")) {
+    // Open modal for any step - it will show all steps for that day
+    // First, we need to determine the day number from the current step
+    if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && cadenceStructure.length > 0) {
+      const allSteps = cadenceStructure.flatMap((day) => day.actions);
+      const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+      if (currentStep) {
+        // Create a person object with the correct dayNumber for the modal
+        const personWithDay = {
+          ...person,
+          dayNumber: currentStep.day_number
+        };
+        handleOpenMultiActionModal(personWithDay);
+      } else {
+        // Fallback: use person's dayNumber if available
+        if (person.dayNumber !== null && person.dayNumber !== undefined) {
+          handleOpenMultiActionModal(person);
+        }
+      }
+    } else if (person.dayNumber !== null && person.dayNumber !== undefined) {
       handleOpenMultiActionModal(person);
     }
   };
@@ -1119,11 +1172,7 @@ export default function CadenceDetailPage() {
                           </button>
                         </div>
                         <span
-                          className={`ml-2 text-gray-700 ${
-                            person.currentStep.includes("Multi-Action")
-                              ? "cursor-pointer hover:text-gray-900"
-                              : ""
-                          }`}
+                          className="ml-2 text-gray-700 cursor-pointer hover:text-gray-900"
                           onClick={() => handleStepTextClick(person)}
                         >
                           {person.currentStep}
