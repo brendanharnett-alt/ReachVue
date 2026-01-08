@@ -276,3 +276,53 @@ export async function removeContactFromCadence(contactCadenceId) {
     throw err
   }
 }
+
+export async function deleteCadence(cadenceId) {
+  try {
+    // #region agent log
+    console.log('[DEBUG] deleteCadence API call', { cadenceId, url: `${BASE_URL}/cadences/${cadenceId}` });
+    // #endregion
+
+    const res = await fetch(`${BASE_URL}/cadences/${cadenceId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    })
+
+    // #region agent log
+    console.log('[DEBUG] deleteCadence response', { 
+      cadenceId, 
+      ok: res.ok, 
+      status: res.status, 
+      statusText: res.statusText,
+      contentType: res.headers.get("content-type")
+    });
+    // #endregion
+
+    if (!res.ok) {
+      const errorText = await res.text()
+      // #region agent log
+      console.log('[DEBUG] deleteCadence error response', { cadenceId, errorText, status: res.status });
+      // #endregion
+      throw new Error(errorText || "Failed to delete cadence")
+    }
+    const contentType = res.headers.get("content-type")
+    if (contentType && contentType.includes("application/json")) {
+      const jsonData = await res.json()
+      // #region agent log
+      console.log('[DEBUG] deleteCadence success', { cadenceId, jsonData });
+      // #endregion
+      return jsonData
+    } else {
+      // #region agent log
+      console.log('[DEBUG] deleteCadence success (non-JSON)', { cadenceId });
+      // #endregion
+      return { success: true }
+    }
+  } catch (err) {
+    // #region agent log
+    console.error('[DEBUG] deleteCadence exception', { cadenceId, error: err.message, stack: err.stack });
+    // #endregion
+    console.error("Delete cadence error:", err)
+    throw err
+  }
+}

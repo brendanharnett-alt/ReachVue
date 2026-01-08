@@ -8,9 +8,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MailCheck, Eye, Edit, Play, MoreVertical, History, SkipForward, Clock, ChevronRight, ChevronDown } from "lucide-react";
+import { Plus, MailCheck, Eye, Edit, Play, MoreVertical, History, SkipForward, Clock, ChevronRight, ChevronDown, Trash2 } from "lucide-react";
 import CreateCadenceModal from "@/components/modals/CreateCadenceModal";
-import { fetchCadences, createCadence } from "@/api";
+import { fetchCadences, createCadence, deleteCadence } from "@/api";
 
 // Mock cadence data
 const mockCadences = [
@@ -170,6 +170,7 @@ export default function CadencesPage() {
   const [createCadenceModalOpen, setCreateCadenceModalOpen] = useState(false);
   const [cadences, setCadences] = useState([]);
   const [loadingCadences, setLoadingCadences] = useState(false);
+  const [selectedCadences, setSelectedCadences] = useState([]);
   const toDoItems = generateToDoItems();
 
   // Fetch cadences from backend
@@ -246,6 +247,70 @@ export default function CadencesPage() {
 
   const handleToDoRowClick = (cadenceId) => {
     navigate(`/cadences/${cadenceId}`);
+  };
+
+  // Handle checkbox selection
+  const toggleSelect = (cadenceId) => {
+    setSelectedCadences((prev) =>
+      prev.includes(cadenceId)
+        ? prev.filter((id) => id !== cadenceId)
+        : [...prev, cadenceId]
+    );
+  };
+
+  // Handle select all
+  const toggleSelectAll = () => {
+    if (selectedCadences.length === cadences.length) {
+      setSelectedCadences([]);
+    } else {
+      setSelectedCadences(cadences.map((cadence) => cadence.id));
+    }
+  };
+
+  // Handle delete selected cadences
+  const handleDeleteSelected = async () => {
+    if (!selectedCadences.length) return;
+    if (!window.confirm(`Delete ${selectedCadences.length} cadence(s)? This will remove all contacts from these cadences.`)) return;
+
+    try {
+      // #region agent log
+      console.log('[DEBUG] Starting delete cadences', { selectedCadences, count: selectedCadences.length });
+      // #endregion
+
+      // Delete each selected cadence
+      const results = await Promise.allSettled(
+        selectedCadences.map((cadenceId) => {
+          // #region agent log
+          console.log('[DEBUG] Deleting cadence', { cadenceId, type: typeof cadenceId });
+          // #endregion
+          return deleteCadence(cadenceId);
+        })
+      );
+
+      // #region agent log
+      console.log('[DEBUG] Delete results', { results: results.map((r, i) => ({ 
+        cadenceId: selectedCadences[i], 
+        status: r.status, 
+        error: r.status === 'rejected' ? r.reason?.message : null 
+      })) });
+      // #endregion
+
+      // Check if any deletions failed
+      const failures = results.filter((r) => r.status === 'rejected');
+      if (failures.length > 0) {
+        const errorMessages = failures.map((f) => f.reason?.message || 'Unknown error').join(', ');
+        throw new Error(`Failed to delete ${failures.length} cadence(s): ${errorMessages}`);
+      }
+
+      // Refresh cadences list
+      const updatedCadences = await fetchCadences();
+      setCadences(updatedCadences);
+      setSelectedCadences([]);
+      alert(`✅ ${selectedCadences.length} cadence(s) deleted successfully.`);
+    } catch (err) {
+      console.error("Failed to delete cadences:", err);
+      alert(`❌ Failed to delete cadences: ${err.message || 'Please try again.'}`);
+    }
   };
 
   const handleSkip = (itemId, e) => {
@@ -466,9 +531,33 @@ export default function CadencesPage() {
       {/* Cadences Tab Content */}
       {activeTab === "cadences" && (
         <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
+          {/* Delete Button */}
+          {selectedCadences.length > 0 && (
+            <div className="p-4 border-b flex justify-end">
+              <Button
+                variant="destructive"
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700"
+                onClick={handleDeleteSelected}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete Selected ({selectedCadences.length})
+              </Button>
+            </div>
+          )}
         <table className="w-full text-sm text-left text-gray-700">
           <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
             <tr>
+              <th className="px-4 py-3 w-[5%]">
+                <input
+                  type="checkbox"
+                  checked={
+                    selectedCadences.length > 0 &&
+                    selectedCadences.length === cadences.length
+                  }
+                  onChange={toggleSelectAll}
+                  className="accent-blue-600 cursor-pointer"
+                />
+              </th>
               <th className="px-4 py-3 text-left">Cadence Name</th>
               <th className="px-4 py-3 text-left">Description</th>
               <th className="px-4 py-3 text-left"># of People</th>
@@ -480,23 +569,36 @@ export default function CadencesPage() {
           <tbody>
             {loadingCadences ? (
               <tr>
-                <td colSpan={6} className="px-4 py-3 text-center text-gray-500">
+                <td colSpan={7} className="px-4 py-3 text-center text-gray-500">
                   Loading cadences...
                 </td>
               </tr>
             ) : cadences.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-3 text-center text-gray-500">
+                <td colSpan={7} className="px-4 py-3 text-center text-gray-500">
                   No cadences found. Create your first cadence to get started.
                 </td>
               </tr>
             ) : (
-              cadences.map((cadence) => (
+              cadences.map((cadence) => {
+                const isSelected = selectedCadences.includes(cadence.id);
+                return (
                 <tr
                   key={cadence.id}
-                  className="border-b hover:bg-gray-50 transition cursor-pointer"
+                  className={`border-b hover:bg-gray-50 transition cursor-pointer ${
+                    isSelected ? "bg-blue-50" : ""
+                  }`}
                   onClick={() => handleRowClick(cadence.id)}
                 >
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelect(cadence.id)}
+                      className="accent-blue-600 cursor-pointer"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </td>
                   <td className="px-4 py-3 font-medium text-blue-600 hover:underline">
                     {cadence.name}
                   </td>
@@ -537,7 +639,8 @@ export default function CadencesPage() {
                     </div>
                   </td>
                 </tr>
-              ))
+              );
+              })
             )}
           </tbody>
         </table>
