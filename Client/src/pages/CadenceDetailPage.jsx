@@ -28,7 +28,7 @@ import MultiActionModal from "@/components/modals/MultiActionModal";
 import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
 import AddStepModal from "@/components/modals/AddStepModal";
 import AddContactToCadenceModal from "@/components/modals/AddContactToCadenceModal";
-import { fetchCadenceSteps, createCadenceStep, deleteCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts, removeContactFromCadence } from "@/api";
+import { fetchCadenceSteps, createCadenceStep, deleteCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts, removeContactFromCadence, skipCadenceStep } from "@/api";
 
 // Generate mock data with dates relative to today
 const generateMockPeople = () => {
@@ -306,49 +306,32 @@ export default function CadenceDetailPage() {
         const transformed = cadenceContacts.map((contact) => {
           const fullContact = contactMap.get(contact.contact_id) || {};
           
-          // #region agent log
-          console.log('[DEBUG] Contact data from backend', {contact_id:contact.contact_id,current_step_order:contact.current_step_order,day_number:contact.day_number,step_label:contact.step_label,cadenceStructureLength:cadenceStructure.length});
-          // #endregion
+          console.log('[LOAD CONTACTS] Contact from backend', {
+            contact_id: contact.contact_id,
+            contact_cadence_id: contact.contact_cadence_id,
+            current_step_order: contact.current_step_order,
+            day_number: contact.day_number,
+            step_label: contact.step_label
+          });
           
-          // Calculate due date based on current step's day_number
-          // Override backend's current_step_order if it points to a step that's not day 0
-          // The backend incorrectly sets current_step_order to non-zero values for new contacts
+          // Use the current_step_order from backend - don't override it
+          // The override logic was causing issues with skip step functionality
           let currentStepOrder = contact.current_step_order;
           
-          // #region agent log
-          console.log('[DEBUG] Before first step calculation', {currentStepOrder,isNull:currentStepOrder===null,cadenceStructureLength:cadenceStructure.length});
-          // #endregion
-          
-          if (cadenceStructure.length > 0) {
+          // Only set to first step if current_step_order is null (new contact)
+          // Find first step by day_number (lowest), then step_order (lowest within that day)
+          if (currentStepOrder === null && cadenceStructure.length > 0) {
             const allSteps = cadenceStructure.flatMap((day) => day.actions);
-            
-            // #region agent log
-            console.log('[DEBUG] All steps from cadenceStructure', {allStepsCount:allSteps.length,allSteps:allSteps.map(s=>({step_order:s.step_order,day_number:s.day_number,label:s.label}))});
-            // #endregion
-            
-            // Find the step with the minimum day_number (day 0)
-            const firstStep = allSteps.reduce((min, step) => {
-              if (!min) return step;
-              return step.day_number < min.day_number ? step : min;
-            }, null);
-            
-            // #region agent log
-            console.log('[DEBUG] First step found', {firstStep:firstStep?{step_order:firstStep.step_order,day_number:firstStep.day_number,label:firstStep.label}:null});
-            // #endregion
-            
-            // If current_step_order is NULL, or if it points to a step that's not day 0, use the first step
-            if (currentStepOrder === null) {
-              currentStepOrder = firstStep ? firstStep.step_order : null;
-            } else {
-              // Check if the current step is day 0 - if not, override to day 0
-              const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
-              if (currentStep && currentStep.day_number !== 0 && firstStep) {
-                // #region agent log
-                console.log('[DEBUG] Overriding current_step_order - backend set to day', currentStep.day_number, 'but should be day 0');
-                // #endregion
-                currentStepOrder = firstStep.step_order;
+            // Sort by day_number first, then step_order
+            const sortedSteps = [...allSteps].sort((a, b) => {
+              if (a.day_number !== b.day_number) {
+                return a.day_number - b.day_number;
               }
-            }
+              return a.step_order - b.step_order;
+            });
+            const firstStep = sortedSteps[0];
+            currentStepOrder = firstStep ? firstStep.step_order : null;
+            console.log('[LOAD CONTACTS] Set null current_step_order to first step:', currentStepOrder, firstStep ? { day: firstStep.day_number, step_order: firstStep.step_order } : null);
           }
           let dueDate = null;
           let currentStepLabel = "Not Started";
@@ -360,9 +343,16 @@ export default function CadenceDetailPage() {
             const allSteps = cadenceStructure.flatMap((day) => day.actions);
             const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
             
-            // #region agent log
-            console.log('[DEBUG] Current step lookup', {currentStepOrder,currentStep:currentStep?{step_order:currentStep.step_order,day_number:currentStep.day_number,label:currentStep.label}:null});
-            // #endregion
+            console.log('[LOAD CONTACTS] Step lookup', {
+              currentStepOrder,
+              found: !!currentStep,
+              currentStep: currentStep ? {
+                step_order: currentStep.step_order,
+                day_number: currentStep.day_number,
+                label: currentStep.label
+              } : null,
+              allStepOrders: allSteps.map(s => s.step_order)
+            });
             
             if (currentStep) {
               // Use day_number from the current step (more reliable than contact.day_number)
@@ -373,9 +363,11 @@ export default function CadenceDetailPage() {
               const daySteps = cadenceStructure
                 .find((d) => d.day === dayNumber)?.actions || [];
               
-              // #region agent log
-              console.log('[DEBUG] Day steps check', {dayNumber,dayStepsCount:daySteps.length,daySteps:daySteps.map(s=>({step_order:s.step_order,label:s.label}))});
-              // #endregion
+              console.log('[LOAD CONTACTS] Day steps', {
+                dayNumber,
+                dayStepsCount: daySteps.length,
+                dayStepOrders: daySteps.map(s => s.step_order)
+              });
               
               // If there are multiple actions on the same day, it's a multi-action step
               if (daySteps.length > 1) {
@@ -537,10 +529,118 @@ export default function CadenceDetailPage() {
     window.open("https://www.linkedin.com/in/arvindkrishna/", "_blank");
   };
 
-  const handleSkip = (personId, e) => {
+  const handleSkip = async (personId, e) => {
     e.stopPropagation();
-    // Placeholder - no implementation yet
-    console.log("Skip for person:", personId);
+    
+    // personId should be the contact_cadence_id
+    console.log('[SKIP STEP FRONTEND] Skipping step for personId:', personId);
+    const person = peopleInCadence.find(p => p.id === personId || p.contactId === personId);
+    console.log('[SKIP STEP FRONTEND] Found person:', { 
+      id: person?.id, 
+      contactId: person?.contactId, 
+      name: person ? `${person.firstName} ${person.lastName}` : 'NOT FOUND' 
+    });
+    
+    if (!person) {
+      console.error('[SKIP STEP FRONTEND] Person not found for personId:', personId);
+      alert('Contact not found');
+      return;
+    }
+    
+    // Use the contact_cadence_id (person.id)
+    const contactCadenceId = person.id;
+    console.log('[SKIP STEP FRONTEND] Using contact_cadence_id:', contactCadenceId);
+    
+    try {
+      await skipCadenceStep(contactCadenceId);
+      
+      // Refresh the contacts list to show the updated step
+      const [cadenceContacts, allContacts] = await Promise.all([
+        fetchCadenceContacts(cadenceId),
+        fetchContacts(),
+      ]);
+      
+      // Create a map of contact_id to full contact details
+      const contactMap = new Map();
+      allContacts.forEach((contact) => {
+        contactMap.set(contact.id, contact);
+      });
+      
+      // Transform backend data to match UI format
+      // Note: Don't override current_step_order here since we just updated it via skip
+      const transformed = cadenceContacts.map((contact) => {
+        const fullContact = contactMap.get(contact.contact_id) || {};
+        let currentStepOrder = contact.current_step_order;
+        
+        // Only set to first step if current_step_order is null
+        if (currentStepOrder === null && cadenceStructure.length > 0) {
+          const allSteps = cadenceStructure.flatMap((day) => day.actions);
+          const firstStep = allSteps.reduce((min, step) => {
+            if (!min) return step;
+            return step.day_number < min.day_number ? step : min;
+          }, null);
+          currentStepOrder = firstStep ? firstStep.step_order : null;
+        }
+        
+        let dueDate = null;
+        let currentStepLabel = "Not Started";
+        let personDayNumber = contact.day_number || null;
+        
+        if (currentStepOrder !== null && cadenceStructure.length > 0) {
+          const allSteps = cadenceStructure.flatMap((day) => day.actions);
+          const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
+          
+          if (currentStep) {
+            const dayNumber = currentStep.day_number;
+            personDayNumber = dayNumber;
+            
+            const daySteps = cadenceStructure
+              .find((d) => d.day === dayNumber)?.actions || [];
+            
+            if (daySteps.length > 1) {
+              currentStepLabel = `Day ${dayNumber}: Multi-Action`;
+            } else {
+              currentStepLabel = `Day ${dayNumber}: ${currentStep.label}`;
+            }
+            
+            // Calculate due date based on day_number
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const dueDateObj = new Date(today);
+            dueDateObj.setDate(today.getDate() + dayNumber);
+            dueDate = dueDateObj.toISOString().split("T")[0];
+          } else if (contact.step_label) {
+            currentStepLabel = contact.step_label;
+          }
+        }
+
+        return {
+          id: contact.contact_cadence_id,
+          contactId: contact.contact_id,
+          company: fullContact.company || "—",
+          firstName: contact.first_name || "",
+          lastName: contact.last_name || "",
+          first_name: contact.first_name || "",
+          last_name: contact.last_name || "",
+          title: fullContact.title || "—",
+          email: fullContact.email || null,
+          mobile_phone: fullContact.mobile_phone || null,
+          phone: fullContact.mobile_phone || null,
+          linkedin_url: fullContact.linkedin_url || null,
+          tags: fullContact.tags || [],
+          currentStep: currentStepLabel,
+          dueOn: dueDate,
+          lastStepCompletedAt: null,
+          currentStepOrder: currentStepOrder,
+          dayNumber: personDayNumber,
+        };
+      });
+      
+      setPeopleInCadence(transformed);
+    } catch (err) {
+      console.error("Failed to skip step:", err);
+      alert(`Failed to skip step: ${err.message || "Please try again."}`);
+    }
   };
 
   const handlePostpone = (personId, e) => {
@@ -927,33 +1027,24 @@ export default function CadenceDetailPage() {
       });
       
         // Use the same transformation logic as the main useEffect
+        // Trust the backend's current_step_order - don't override it
         const transformed = cadenceContacts.map((contact) => {
           const fullContact = contactMap.get(contact.contact_id) || {};
-          
-          // Override backend's current_step_order if it points to a step that's not day 0
-          // The backend incorrectly sets current_step_order to non-zero values for new contacts
           let currentStepOrder = contact.current_step_order;
           
-          if (cadenceStructure.length > 0) {
+          // Only set to first step if current_step_order is null (new contact)
+          // Find first step by day_number (lowest), then step_order (lowest within that day)
+          if (currentStepOrder === null && cadenceStructure.length > 0) {
             const allSteps = cadenceStructure.flatMap((day) => day.actions);
-            
-            // Find the step with the minimum day_number (day 0)
-            const firstStep = allSteps.reduce((min, step) => {
-              if (!min) return step;
-              return step.day_number < min.day_number ? step : min;
-            }, null);
-            
-            // If current_step_order is NULL, or if it points to a step that's not day 0, use the first step
-            if (currentStepOrder === null) {
-              currentStepOrder = firstStep ? firstStep.step_order : null;
-            } else {
-              // Check if the current step is day 0 - if not, override to day 0
-              const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
-              if (currentStep && currentStep.day_number !== 0 && firstStep) {
-                // Override: backend set to wrong day, force to day 0
-                currentStepOrder = firstStep.step_order;
+            // Sort by day_number first, then step_order
+            const sortedSteps = [...allSteps].sort((a, b) => {
+              if (a.day_number !== b.day_number) {
+                return a.day_number - b.day_number;
               }
-            }
+              return a.step_order - b.step_order;
+            });
+            const firstStep = sortedSteps[0];
+            currentStepOrder = firstStep ? firstStep.step_order : null;
           }
         
         let dueDate = null;

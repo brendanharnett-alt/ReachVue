@@ -298,6 +298,23 @@ export async function removeContactFromCadence(contactCadenceId) {
   }
 }
 
+export async function skipCadenceStep(contactCadenceId) {
+  try {
+    const res = await fetch(`${BASE_URL}/contact-cadences/${contactCadenceId}/skip-step`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || "Failed to skip step")
+    }
+    return await res.json()
+  } catch (err) {
+    console.error("Skip cadence step error:", err)
+    throw err
+  }
+}
+
 export async function deleteCadence(cadenceId) {
   try {
     // #region agent log

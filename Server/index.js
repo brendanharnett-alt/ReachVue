@@ -1054,13 +1054,27 @@ app.post('/cadences/:cadenceId/contacts', async (req, res) => {
   }
 
   try {
+    // Find the first step by day_number (lowest), then step_order (lowest within that day)
+    const firstStepResult = await pool.query(
+      `
+      SELECT step_order
+      FROM cadence_steps
+      WHERE cadence_id = $1 AND is_active = true
+      ORDER BY day_number ASC, step_order ASC
+      LIMIT 1
+      `,
+      [cadenceId]
+    );
+
+    const firstStepOrder = firstStepResult.rowCount > 0 ? firstStepResult.rows[0].step_order : 0;
+
     await pool.query(
       `
       INSERT INTO contact_cadences (contact_id, cadence_id, current_step_order)
-      VALUES ($1, $2, 0)
+      VALUES ($1, $2, $3)
       ON CONFLICT DO NOTHING
       `,
-      [contact_id, cadenceId]
+      [contact_id, cadenceId, firstStepOrder]
     );
 
     res.status(201).json({ success: true, message: "Contact added to cadence" });
@@ -1079,13 +1093,27 @@ app.post('/cadences/:cadenceId/contacts/bulk', async (req, res) => {
   }
 
   try {
+    // Find the first step by day_number (lowest), then step_order (lowest within that day)
+    const firstStepResult = await pool.query(
+      `
+      SELECT step_order
+      FROM cadence_steps
+      WHERE cadence_id = $1 AND is_active = true
+      ORDER BY day_number ASC, step_order ASC
+      LIMIT 1
+      `,
+      [cadenceId]
+    );
+
+    const firstStepOrder = firstStepResult.rowCount > 0 ? firstStepResult.rows[0].step_order : 0;
+
     await pool.query(
       `
       INSERT INTO contact_cadences (contact_id, cadence_id, current_step_order)
-      SELECT unnest($1::int[]), $2, 0
+      SELECT unnest($1::int[]), $2, $3
       ON CONFLICT DO NOTHING
       `,
-      [contact_ids, cadenceId]
+      [contact_ids, cadenceId, firstStepOrder]
     );
 
     res.sendStatus(201);
@@ -1116,6 +1144,105 @@ app.delete('/contact-cadences/:id', async (req, res) => {
   } catch (err) {
     console.error('Error removing contact from cadence:', err);
     res.status(500).send('Failed to remove contact from cadence');
+  }
+});
+
+app.put('/contact-cadences/:id/skip-step', async (req, res) => {
+  const { id } = req.params; // contact_cadence_id
+
+  try {
+    // First, get the current contact_cadence record to find cadence_id and current_step_order
+    const contactCadenceResult = await pool.query(
+      `SELECT cadence_id, current_step_order FROM contact_cadences WHERE id = $1 AND ended_at IS NULL`,
+      [id]
+    );
+
+    if (contactCadenceResult.rowCount === 0) {
+      return res.status(404).send('Active contact cadence not found');
+    }
+
+    const { cadence_id, current_step_order } = contactCadenceResult.rows[0];
+    console.log('[SKIP STEP] Current state:', { contact_cadence_id: id, cadence_id, current_step_order });
+
+    // Get all active steps for this cadence, ordered by day_number then step_order
+    // This ensures lower day numbers come before higher day numbers
+    const stepsResult = await pool.query(
+      `
+      SELECT id, step_order, day_number, step_label
+      FROM cadence_steps
+      WHERE cadence_id = $1 AND is_active = true
+      ORDER BY day_number ASC, step_order ASC
+      `,
+      [cadence_id]
+    );
+
+    if (stepsResult.rowCount === 0) {
+      return res.status(404).send('No active steps found for this cadence');
+    }
+
+    const allSteps = stepsResult.rows;
+    console.log('[SKIP STEP] All steps (ordered by day_number, step_order):', allSteps.map(s => ({ step_order: s.step_order, day_number: s.day_number, label: s.step_label })));
+    
+    // Find current step index
+    let currentStepIndex = -1;
+    if (current_step_order !== null) {
+      currentStepIndex = allSteps.findIndex(step => step.step_order === current_step_order);
+    }
+
+    console.log('[SKIP STEP] Current step index:', currentStepIndex);
+
+    // Find next step - respect day_number ordering
+    let nextStepOrder = null;
+    
+    if (currentStepIndex === -1) {
+      // No current step, move to first step (lowest day_number, lowest step_order)
+      nextStepOrder = allSteps[0].step_order;
+      console.log('[SKIP STEP] No current step, moving to first:', nextStepOrder);
+    } else if (currentStepIndex < allSteps.length - 1) {
+      // There's a next step in the sequence (by day_number, then step_order)
+      const nextStep = allSteps[currentStepIndex + 1];
+      nextStepOrder = nextStep.step_order;
+      console.log('[SKIP STEP] Moving to next step:', { 
+        from: allSteps[currentStepIndex].step_order, 
+        to: nextStepOrder,
+        from_day: allSteps[currentStepIndex].day_number,
+        to_day: nextStep.day_number
+      });
+    } else {
+      // Already at the last step - stay at current step (don't advance)
+      nextStepOrder = current_step_order;
+      console.log('[SKIP STEP] Already at last step, staying:', nextStepOrder);
+    }
+
+    // Update current_step_order - ONLY for this specific contact_cadence_id
+    const updateResult = await pool.query(
+      `
+      UPDATE contact_cadences
+      SET current_step_order = $1, updated_at = NOW()
+      WHERE id = $2 AND ended_at IS NULL
+      RETURNING id, contact_id, current_step_order
+      `,
+      [nextStepOrder, id]
+    );
+
+    console.log('[SKIP STEP] Update result:', { 
+      rowsUpdated: updateResult.rowCount,
+      updatedRecord: updateResult.rows[0] 
+    });
+    
+    if (updateResult.rowCount === 0) {
+      console.error('[SKIP STEP] No rows updated!', { id, nextStepOrder });
+      return res.status(404).send('Contact cadence not found or already ended');
+    }
+
+    res.json({ 
+      success: true, 
+      current_step_order: nextStepOrder,
+      message: 'Step advanced successfully' 
+    });
+  } catch (err) {
+    console.error('Error skipping step:', err);
+    res.status(500).send('Failed to skip step');
   }
 });
 
