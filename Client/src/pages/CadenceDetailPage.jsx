@@ -23,6 +23,7 @@ import {
   Edit,
   Copy,
   Trash2,
+  Layers,
 } from "lucide-react";
 import MultiActionModal from "@/components/modals/MultiActionModal";
 import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
@@ -335,6 +336,7 @@ export default function CadenceDetailPage() {
           }
           let dueDate = null;
           let currentStepLabel = "Not Started";
+          let currentStepInfo = { isMultiStep: false, stepType: null };
           
           let personDayNumber = contact.day_number || null;
           
@@ -369,13 +371,41 @@ export default function CadenceDetailPage() {
                 dayStepOrders: daySteps.map(s => s.step_order)
               });
               
+              // Determine if it's multi-step and get step type
+              const isMultiStep = daySteps.length > 1;
+              const stepType = currentStep.type || "task"; // action_type from backend
+              
+              // Calculate remaining steps for multi-action
+              let remainingSteps = null;
+              if (isMultiStep) {
+                // Sort day steps by step_order to find current position
+                const sortedDaySteps = [...daySteps].sort((a, b) => a.step_order - b.step_order);
+                const currentStepIndex = sortedDaySteps.findIndex(s => s.step_order === currentStepOrder);
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:382',message:'Remaining steps calculation (FIXED)',data:{dayNumber,currentStepOrder,dayStepsCount:daySteps.length,sortedDaySteps:sortedDaySteps.map(s=>({step_order:s.step_order,label:s.label})),currentStepIndex,calculatedRemaining:sortedDaySteps.length - currentStepIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+                // #endregion
+                
+                if (currentStepIndex !== -1) {
+                  // Fixed: removed the +1 to correctly count remaining steps
+                  remainingSteps = sortedDaySteps.length - currentStepIndex;
+                }
+              }
+              
               // If there are multiple actions on the same day, it's a multi-action step
-              if (daySteps.length > 1) {
+              if (isMultiStep) {
                 currentStepLabel = `Day ${dayNumber}: Multi-Action`;
               } else {
                 // Format: "Day N: Step <NAME>"
                 currentStepLabel = `Day ${dayNumber}: Step ${currentStep.label || "Unknown"}`;
               }
+              
+              // Store step info for icon rendering
+              currentStepInfo = {
+                isMultiStep,
+                stepType,
+                remainingSteps, // Number of steps remaining in multi-action (null if not multi-action)
+              };
               
               // #region agent log
               console.log('[DEBUG] Final step label', {currentStepLabel,dayNumber,personDayNumber});
@@ -412,6 +442,7 @@ export default function CadenceDetailPage() {
             lastStepCompletedAt: null, // Backend doesn't provide this yet
             currentStepOrder: currentStepOrder,
             dayNumber: personDayNumber,
+            stepInfo: currentStepInfo, // { isMultiStep, stepType }
           };
         });
         setPeopleInCadence(transformed);
@@ -584,6 +615,7 @@ export default function CadenceDetailPage() {
         
         let dueDate = null;
         let currentStepLabel = "Not Started";
+        let currentStepInfo = { isMultiStep: false, stepType: null };
         let personDayNumber = contact.day_number || null;
         
         if (currentStepOrder !== null && cadenceStructure.length > 0) {
@@ -597,11 +629,39 @@ export default function CadenceDetailPage() {
             const daySteps = cadenceStructure
               .find((d) => d.day === dayNumber)?.actions || [];
             
-            if (daySteps.length > 1) {
+            // Determine if it's multi-step and get step type
+            const isMultiStep = daySteps.length > 1;
+            const stepType = currentStep.type || "task";
+            
+            // Calculate remaining steps for multi-action
+            let remainingSteps = null;
+            if (isMultiStep) {
+              // Sort day steps by step_order to find current position
+              const sortedDaySteps = [...daySteps].sort((a, b) => a.step_order - b.step_order);
+              const currentStepIndex = sortedDaySteps.findIndex(s => s.step_order === currentStepOrder);
+              
+              // #region agent log
+              fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:630',message:'Remaining steps calculation (handleSkip - FIXED)',data:{dayNumber,currentStepOrder,dayStepsCount:daySteps.length,sortedDaySteps:sortedDaySteps.map(s=>({step_order:s.step_order,label:s.label})),currentStepIndex,calculatedRemaining:sortedDaySteps.length - currentStepIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+              // #endregion
+              
+              if (currentStepIndex !== -1) {
+                // Fixed: removed the +1 to correctly count remaining steps
+                remainingSteps = sortedDaySteps.length - currentStepIndex;
+              }
+            }
+            
+            if (isMultiStep) {
               currentStepLabel = `Day ${dayNumber}: Multi-Action`;
             } else {
               currentStepLabel = `Day ${dayNumber}: ${currentStep.label}`;
             }
+            
+            // Store step info for icon rendering
+            currentStepInfo = {
+              isMultiStep,
+              stepType,
+              remainingSteps, // Number of steps remaining in multi-action (null if not multi-action)
+            };
             
             // Calculate due date based on day_number
             const today = new Date();
@@ -633,6 +693,7 @@ export default function CadenceDetailPage() {
           lastStepCompletedAt: null,
           currentStepOrder: currentStepOrder,
           dayNumber: personDayNumber,
+          stepInfo: currentStepInfo, // { isMultiStep, stepType }
         };
       });
       
@@ -1049,6 +1110,7 @@ export default function CadenceDetailPage() {
         
         let dueDate = null;
         let currentStepLabel = "Not Started";
+        let currentStepInfo = { isMultiStep: false, stepType: null };
         let personDayNumber = contact.day_number || null;
         
         if (currentStepOrder !== null && cadenceStructure.length > 0) {
@@ -1065,13 +1127,41 @@ export default function CadenceDetailPage() {
             const daySteps = cadenceStructure
               .find((d) => d.day === dayNumber)?.actions || [];
             
+            // Determine if it's multi-step and get step type
+            const isMultiStep = daySteps.length > 1;
+            const stepType = currentStep.type || "task";
+            
+            // Calculate remaining steps for multi-action
+            let remainingSteps = null;
+            if (isMultiStep) {
+              // Sort day steps by step_order to find current position
+              const sortedDaySteps = [...daySteps].sort((a, b) => a.step_order - b.step_order);
+              const currentStepIndex = sortedDaySteps.findIndex(s => s.step_order === currentStepOrder);
+              
+              // #region agent log
+              fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:1141',message:'Remaining steps calculation (handleAddContact - FIXED)',data:{dayNumber,currentStepOrder,dayStepsCount:daySteps.length,sortedDaySteps:sortedDaySteps.map(s=>({step_order:s.step_order,label:s.label})),currentStepIndex,calculatedRemaining:sortedDaySteps.length - currentStepIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+              // #endregion
+              
+              if (currentStepIndex !== -1) {
+                // Fixed: removed the +1 to correctly count remaining steps
+                remainingSteps = sortedDaySteps.length - currentStepIndex;
+              }
+            }
+            
             // If there are multiple actions on the same day, it's a multi-action step
-            if (daySteps.length > 1) {
+            if (isMultiStep) {
               currentStepLabel = `Day ${dayNumber}: Multi-Action`;
             } else {
               // Format: "Day N: Step <NAME>"
               currentStepLabel = `Day ${dayNumber}: Step ${currentStep.label || "Unknown"}`;
             }
+            
+            // Store step info for icon rendering
+            currentStepInfo = {
+              isMultiStep,
+              stepType,
+              remainingSteps, // Number of steps remaining in multi-action (null if not multi-action)
+            };
             
             // Calculate due date: today + day_number (simplified - in real app would track join date)
             const today = new Date();
@@ -1104,6 +1194,7 @@ export default function CadenceDetailPage() {
           lastStepCompletedAt: null,
           currentStepOrder: currentStepOrder,
           dayNumber: personDayNumber,
+          stepInfo: currentStepInfo, // { isMultiStep, stepType }
         };
       });
       setPeopleInCadence(transformed);
@@ -1277,50 +1368,73 @@ export default function CadenceDetailPage() {
                     </td>
                     <td className="p-2 text-gray-600 truncate max-w-[160px]">{person.title}</td>
                     <td className="p-2">
-                      <div className="flex items-center">
-                        <div className="w-6 flex items-center justify-start flex-shrink-0">
-                          <button
-                            className={`h-6 w-6 rounded-full flex items-center justify-center transition-all ${
-                              pastDue
-                                ? "bg-gray-200 hover:bg-gray-300"
-                                : "border border-gray-300 bg-transparent hover:border-gray-400"
-                            }`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleExecuteAction(person, e);
-                            }}
+                      <div className="flex items-center gap-2">
+                        {/* Step type icon */}
+                        {person.stepInfo?.isMultiStep ? (
+                          <Layers className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                        ) : person.stepInfo?.stepType ? (
+                          (() => {
+                            const stepType = person.stepInfo.stepType.toLowerCase();
+                            if (stepType === "email") {
+                              return <Mail className="h-4 w-4 text-gray-500 flex-shrink-0" />;
+                            } else if (stepType === "phone" || stepType === "call") {
+                              return <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />;
+                            } else if (stepType === "linkedin") {
+                              return <Linkedin className="h-4 w-4 text-gray-500 flex-shrink-0" />;
+                            } else {
+                              return <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />;
+                            }
+                          })()
+                        ) : null}
+                        <div className="flex flex-col gap-0.5">
+                          <span
+                            className="text-gray-700 cursor-pointer hover:text-gray-900"
+                            onClick={() => handleStepTextClick(person)}
                           >
-                            <Play
-                              className={`h-3 w-3 ${
-                                pastDue
-                                  ? "text-blue-700 fill-blue-700"
-                                  : "text-gray-900"
-                              }`}
-                            />
-                          </button>
+                            {person.currentStep}
+                          </span>
+                          {person.stepInfo?.isMultiStep && person.stepInfo?.remainingSteps !== null && person.stepInfo?.remainingSteps > 0 && (
+                            <span className="text-xs text-gray-500">
+                              {person.stepInfo.remainingSteps} {person.stepInfo.remainingSteps === 1 ? 'step' : 'steps'} remaining
+                            </span>
+                          )}
                         </div>
-                        <span
-                          className="ml-2 text-gray-700 cursor-pointer hover:text-gray-900"
-                          onClick={() => handleStepTextClick(person)}
-                        >
-                          {person.currentStep}
-                        </span>
                       </div>
                     </td>
                     {!selectedContact && (
                       <>
                         <td className="p-2">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-gray-600 hover:text-gray-900"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
+                          <div className="flex items-center gap-2">
+                            <button
+                              className={`h-6 w-6 rounded-full flex items-center justify-center transition-all ${
+                                pastDue
+                                  ? "bg-gray-200 hover:bg-gray-300"
+                                  : "border border-gray-300 bg-transparent hover:border-gray-400"
+                              }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExecuteAction(person, e);
+                              }}
+                            >
+                              <Play
+                                className={`h-3 w-3 ${
+                                  pastDue
+                                    ? "text-blue-700 fill-blue-700"
+                                    : "text-gray-900"
+                                }`}
+                              />
+                            </button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-gray-600 hover:text-gray-900"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-40">
                               <DropdownMenuItem
                                 onClick={(e) => {
@@ -1351,6 +1465,7 @@ export default function CadenceDetailPage() {
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
+                          </div>
                         </td>
                         <td className="p-2">
                           <span
