@@ -202,6 +202,17 @@ function isPastDue(dateString) {
   return dueDate < today;
 }
 
+// Compute due date from started date and day number
+function computeDueDate(startedAt, dayNumber) {
+  if (startedAt === null || startedAt === undefined || dayNumber === null || dayNumber === undefined) {
+    return null;
+  }
+  const date = new Date(startedAt);
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + dayNumber);
+  return date.toISOString().split("T")[0];
+}
+
 // Add unique IDs to actions if they don't have them
 function ensureActionIds(structure) {
   return structure.map((step) => ({
@@ -289,6 +300,9 @@ export default function CadenceDetailPage() {
   // Fetch cadence contacts from backend
   useEffect(() => {
     const loadContacts = async () => {
+      
+      
+      
       if (!cadenceId) return;
       setLoadingContacts(true);
       try {
@@ -304,181 +318,15 @@ export default function CadenceDetailPage() {
         });
         
         // Transform backend data to match UI format
-        const transformed = cadenceContacts.map((contact) => {
-          const fullContact = contactMap.get(contact.contact_id) || {};
-          
-          console.log('[LOAD CONTACTS] Contact from backend', {
-            contact_id: contact.contact_id,
-            contact_cadence_id: contact.contact_cadence_id,
-            current_step_order: contact.current_step_order,
-            day_number: contact.day_number,
-            step_label: contact.step_label
-          });
-          
-          // Use the current_step_order from backend - don't override it
-          // The override logic was causing issues with skip step functionality
-          let currentStepOrder = contact.current_step_order;
-          
-          // Only set to first step if current_step_order is null (new contact)
-          // Find first step by day_number (lowest), then step_order (lowest within that day)
-          if (currentStepOrder === null && cadenceStructure.length > 0) {
-            const allSteps = cadenceStructure.flatMap((day) => day.actions);
-            // Sort by day_number first, then step_order
-            const sortedSteps = [...allSteps].sort((a, b) => {
-              if (a.day_number !== b.day_number) {
-                return a.day_number - b.day_number;
-              }
-              return a.step_order - b.step_order;
-            });
-            const firstStep = sortedSteps[0];
-            currentStepOrder = firstStep ? firstStep.step_order : null;
-            console.log('[LOAD CONTACTS] Set null current_step_order to first step:', currentStepOrder, firstStep ? { day: firstStep.day_number, step_order: firstStep.step_order } : null);
-          }
-          let dueDate = null;
-          let currentStepLabel = "Not Started";
-          let currentStepInfo = { isMultiStep: false, stepType: null };
-          
-          let personDayNumber = contact.day_number || null;
-          
-          if (currentStepOrder !== null && cadenceStructure.length > 0) {
-            // Find the step with matching step_order
-            const allSteps = cadenceStructure.flatMap((day) => day.actions);
-            const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
-            
-            console.log('[LOAD CONTACTS] Step lookup', {
-              currentStepOrder,
-              found: !!currentStep,
-              currentStep: currentStep ? {
-                step_order: currentStep.step_order,
-                day_number: currentStep.day_number,
-                label: currentStep.label
-              } : null,
-              allStepOrders: allSteps.map(s => s.step_order)
-            });
-            
-            if (currentStep) {
-              // Use day_number from the current step (more reliable than contact.day_number)
-              const dayNumber = currentStep.day_number;
-              personDayNumber = dayNumber;
-              
-              // Check if there are multiple actions on the same day_number (multi-step)
-              const daySteps = cadenceStructure
-                .find((d) => d.day === dayNumber)?.actions || [];
-              
-              console.log('[LOAD CONTACTS] Day steps', {
-                dayNumber,
-                dayStepsCount: daySteps.length,
-                dayStepOrders: daySteps.map(s => s.step_order)
-              });
-              
-              // Determine if it's multi-step and get step type
-              const isMultiStep = daySteps.length > 1;
-              const stepType = currentStep.type || "task"; // action_type from backend
-              
-              // Calculate remaining steps for multi-action
-              let remainingSteps = null;
-              if (isMultiStep) {
-                // Sort day steps by step_order to find current position
-                const sortedDaySteps = [...daySteps].sort((a, b) => a.step_order - b.step_order);
-                const currentStepIndex = sortedDaySteps.findIndex(s => s.step_order === currentStepOrder);
-                
-                // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:382',message:'Remaining steps calculation (FIXED)',data:{dayNumber,currentStepOrder,dayStepsCount:daySteps.length,sortedDaySteps:sortedDaySteps.map(s=>({step_order:s.step_order,label:s.label})),currentStepIndex,calculatedRemaining:sortedDaySteps.length - currentStepIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-                // #endregion
-                
-                if (currentStepIndex !== -1) {
-                  // Fixed: removed the +1 to correctly count remaining steps
-                  remainingSteps = sortedDaySteps.length - currentStepIndex;
-                }
-              }
-              
-              // Calculate overall step number in the cadence sequence
-              let overallStepNumber = null;
-              if (!isMultiStep) {
-                // Get all steps from all days, sorted by day_number then step_order
-                const allStepsInSequence = cadenceStructure
-                  .flatMap((day) => day.actions)
-                  .sort((a, b) => {
-                    if (a.day_number !== b.day_number) {
-                      return a.day_number - b.day_number;
-                    }
-                    return a.step_order - b.step_order;
-                  });
-                const stepIndexInSequence = allStepsInSequence.findIndex(
-                  (s) => s.step_order === currentStepOrder && s.day_number === dayNumber
-                );
-                if (stepIndexInSequence !== -1) {
-                  overallStepNumber = stepIndexInSequence + 1; // 1-indexed
-                }
-              }
-              
-              // Store step info for display
-              currentStepInfo = {
-                isMultiStep,
-                stepType,
-                remainingSteps, // Number of steps remaining in multi-action (null if not multi-action)
-                stepName: currentStep.label || "Unknown", // Step name for single steps
-                dayNumber,
-                overallStepNumber, // Step number in overall sequence (null for multi-steps)
-              };
-              
-              // For display: first row shows step name or "Multi-step"
-              if (isMultiStep) {
-                currentStepLabel = "Multi-step";
-              } else {
-                currentStepLabel = currentStep.label || "Unknown";
-              }
-              
-              // #region agent log
-              console.log('[DEBUG] Final step label', {currentStepLabel,dayNumber,personDayNumber});
-              // #endregion
-              
-              // Calculate due date: join_date (started_at) + day_number
-              // The started_at field from backend represents when the contact was added to the cadence (Day 0)
-              if (contact.started_at) {
-                const joinDate = new Date(contact.started_at);
-                joinDate.setHours(0, 0, 0, 0);
-                const dueDateObj = new Date(joinDate);
-                dueDateObj.setDate(joinDate.getDate() + (dayNumber || 0));
-                dueDate = dueDateObj.toISOString().split("T")[0];
-              } else {
-                // Fallback to today if started_at is not available
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const dueDateObj = new Date(today);
-                dueDateObj.setDate(today.getDate() + (dayNumber || 0));
-                dueDate = dueDateObj.toISOString().split("T")[0];
-              }
-            } else if (contact.step_label) {
-              currentStepLabel = contact.step_label;
-            }
-          } else if (contact.step_label) {
-            currentStepLabel = contact.step_label;
-          }
-
-          return {
-            id: contact.contact_cadence_id,
-            contactId: contact.contact_id,
-            company: fullContact.company || "—",
-            firstName: contact.first_name || "",
-            lastName: contact.last_name || "",
-            first_name: contact.first_name || "", // For panel compatibility
-            last_name: contact.last_name || "", // For panel compatibility
-            title: fullContact.title || "—",
-            email: fullContact.email || null,
-            mobile_phone: fullContact.mobile_phone || null,
-            phone: fullContact.mobile_phone || null, // Alias for panel
-            linkedin_url: fullContact.linkedin_url || null,
-            tags: fullContact.tags || [],
-            currentStep: currentStepLabel,
-            dueOn: dueDate,
-            lastStepCompletedAt: null, // Backend doesn't provide this yet
-            currentStepOrder: currentStepOrder,
-            dayNumber: personDayNumber,
-            stepInfo: currentStepInfo, // { isMultiStep, stepType }
-          };
-        });
-        setPeopleInCadence(transformed);
+        
+        setPeopleInCadence(
+          transformCadencePeople({
+            cadenceContacts,
+            allContacts,
+            cadenceStructure,
+          })
+        );
+        
       } catch (err) {
         console.error("Failed to load cadence contacts:", err);
         setPeopleInCadence([]);
@@ -624,146 +472,14 @@ export default function CadenceDetailPage() {
         fetchContacts(),
       ]);
       
-      // Create a map of contact_id to full contact details
-      const contactMap = new Map();
-      allContacts.forEach((contact) => {
-        contactMap.set(contact.id, contact);
-      });
+      setPeopleInCadence(
+        transformCadencePeople({
+          cadenceContacts,
+          allContacts,
+          cadenceStructure,
+        })
+      );
       
-      // Transform backend data to match UI format
-      // Note: Don't override current_step_order here since we just updated it via skip
-      const transformed = cadenceContacts.map((contact) => {
-        const fullContact = contactMap.get(contact.contact_id) || {};
-        let currentStepOrder = contact.current_step_order;
-        
-        // Only set to first step if current_step_order is null
-        if (currentStepOrder === null && cadenceStructure.length > 0) {
-          const allSteps = cadenceStructure.flatMap((day) => day.actions);
-          const firstStep = allSteps.reduce((min, step) => {
-            if (!min) return step;
-            return step.day_number < min.day_number ? step : min;
-          }, null);
-          currentStepOrder = firstStep ? firstStep.step_order : null;
-        }
-        
-        let dueDate = null;
-        let currentStepLabel = "Not Started";
-        let currentStepInfo = { isMultiStep: false, stepType: null };
-        let personDayNumber = contact.day_number || null;
-        
-        if (currentStepOrder !== null && cadenceStructure.length > 0) {
-          const allSteps = cadenceStructure.flatMap((day) => day.actions);
-          const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
-          
-          if (currentStep) {
-            const dayNumber = currentStep.day_number;
-            personDayNumber = dayNumber;
-            
-            const daySteps = cadenceStructure
-              .find((d) => d.day === dayNumber)?.actions || [];
-            
-            // Determine if it's multi-step and get step type
-            const isMultiStep = daySteps.length > 1;
-            const stepType = currentStep.type || "task";
-            
-            // Calculate remaining steps for multi-action
-            let remainingSteps = null;
-            if (isMultiStep) {
-              // Sort day steps by step_order to find current position
-              const sortedDaySteps = [...daySteps].sort((a, b) => a.step_order - b.step_order);
-              const currentStepIndex = sortedDaySteps.findIndex(s => s.step_order === currentStepOrder);
-              
-              // #region agent log
-              fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:630',message:'Remaining steps calculation (handleSkip - FIXED)',data:{dayNumber,currentStepOrder,dayStepsCount:daySteps.length,sortedDaySteps:sortedDaySteps.map(s=>({step_order:s.step_order,label:s.label})),currentStepIndex,calculatedRemaining:sortedDaySteps.length - currentStepIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-              // #endregion
-              
-              if (currentStepIndex !== -1) {
-                // Fixed: removed the +1 to correctly count remaining steps
-                remainingSteps = sortedDaySteps.length - currentStepIndex;
-              }
-            }
-            
-            // Calculate overall step number in the cadence sequence
-            let overallStepNumber = null;
-            if (!isMultiStep) {
-              // Get all steps from all days, sorted by day_number then step_order
-              const allStepsInSequence = cadenceStructure
-                .flatMap((day) => day.actions)
-                .sort((a, b) => {
-                  if (a.day_number !== b.day_number) {
-                    return a.day_number - b.day_number;
-                  }
-                  return a.step_order - b.step_order;
-                });
-              const stepIndexInSequence = allStepsInSequence.findIndex(
-                (s) => s.step_order === currentStepOrder && s.day_number === dayNumber
-              );
-              if (stepIndexInSequence !== -1) {
-                overallStepNumber = stepIndexInSequence + 1; // 1-indexed
-              }
-            }
-            
-            // Store step info for display
-            currentStepInfo = {
-              isMultiStep,
-              stepType,
-              remainingSteps, // Number of steps remaining in multi-action (null if not multi-action)
-              stepName: currentStep.label || "Unknown", // Step name for single steps
-              dayNumber,
-              overallStepNumber, // Step number in overall sequence (null for multi-steps)
-            };
-            
-            // For display: first row shows step name or "Multi-step"
-            if (isMultiStep) {
-              currentStepLabel = "Multi-step";
-            } else {
-              currentStepLabel = currentStep.label || "Unknown";
-            }
-            
-            // Calculate due date: join_date (started_at) + day_number
-            if (contact.started_at) {
-              const joinDate = new Date(contact.started_at);
-              joinDate.setHours(0, 0, 0, 0);
-              const dueDateObj = new Date(joinDate);
-              dueDateObj.setDate(joinDate.getDate() + dayNumber);
-              dueDate = dueDateObj.toISOString().split("T")[0];
-            } else {
-              // Fallback to today if started_at is not available
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const dueDateObj = new Date(today);
-              dueDateObj.setDate(today.getDate() + dayNumber);
-              dueDate = dueDateObj.toISOString().split("T")[0];
-            }
-          } else if (contact.step_label) {
-            currentStepLabel = contact.step_label;
-          }
-        }
-
-        return {
-          id: contact.contact_cadence_id,
-          contactId: contact.contact_id,
-          company: fullContact.company || "—",
-          firstName: contact.first_name || "",
-          lastName: contact.last_name || "",
-          first_name: contact.first_name || "",
-          last_name: contact.last_name || "",
-          title: fullContact.title || "—",
-          email: fullContact.email || null,
-          mobile_phone: fullContact.mobile_phone || null,
-          phone: fullContact.mobile_phone || null,
-          linkedin_url: fullContact.linkedin_url || null,
-          tags: fullContact.tags || [],
-          currentStep: currentStepLabel,
-          dueOn: dueDate,
-          lastStepCompletedAt: null,
-          currentStepOrder: currentStepOrder,
-          dayNumber: personDayNumber,
-          stepInfo: currentStepInfo, // { isMultiStep, stepType }
-        };
-      });
-      
-      setPeopleInCadence(transformed);
     } catch (err) {
       console.error("Failed to skip step:", err);
       alert(`Failed to skip step: ${err.message || "Please try again."}`);
@@ -1054,142 +770,14 @@ export default function CadenceDetailPage() {
       });
 
       // Use the same transformation logic as the main useEffect
-      const transformed = cadenceContacts.map((contact) => {
-        const fullContact = contactMap.get(contact.contact_id) || {};
-
-        // Override backend's current_step_order if it points to a step that's not day 0
-        let currentStepOrder = contact.current_step_order;
-
-        if (cadenceStructure.length > 0) {
-          const allSteps = cadenceStructure.flatMap((day) => day.actions);
-
-          const firstStep = allSteps.reduce((min, step) => {
-            if (!min) return step;
-            return step.day_number < min.day_number ? step : min;
-          }, null);
-
-          if (currentStepOrder === null) {
-            currentStepOrder = firstStep ? firstStep.step_order : null;
-          } else {
-            const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
-            if (currentStep && currentStep.day_number !== 0 && firstStep) {
-              currentStepOrder = firstStep.step_order;
-            }
-          }
-        }
-        let dueDate = null;
-        let currentStepLabel = "Not Started";
-        let currentStepInfo = { isMultiStep: false, stepType: null, remainingSteps: null, stepName: null, dayNumber: null, overallStepNumber: null };
-        let personDayNumber = contact.day_number || null;
-
-        if (currentStepOrder !== null && cadenceStructure.length > 0) {
-          const allSteps = cadenceStructure.flatMap((day) => day.actions);
-          const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
-
-          if (currentStep) {
-            const dayNumber = currentStep.day_number;
-            personDayNumber = dayNumber;
-
-            const daySteps = cadenceStructure
-              .find((d) => d.day === dayNumber)?.actions || [];
-
-            // Determine if it's multi-step and get step type
-            const isMultiStep = daySteps.length > 1;
-            const stepType = currentStep.type || "task";
-            
-            // Calculate remaining steps for multi-action
-            let remainingSteps = null;
-            if (isMultiStep) {
-              // Sort day steps by step_order to find current position
-              const sortedDaySteps = [...daySteps].sort((a, b) => a.step_order - b.step_order);
-              const currentStepIndex = sortedDaySteps.findIndex(s => s.step_order === currentStepOrder);
-              if (currentStepIndex !== -1) {
-                remainingSteps = sortedDaySteps.length - currentStepIndex;
-              }
-            }
-            
-            // Calculate overall step number in the cadence sequence
-            let overallStepNumber = null;
-            if (!isMultiStep) {
-              // Get all steps from all days, sorted by day_number then step_order
-              const allStepsInSequence = cadenceStructure
-                .flatMap((day) => day.actions)
-                .sort((a, b) => {
-                  if (a.day_number !== b.day_number) {
-                    return a.day_number - b.day_number;
-                  }
-                  return a.step_order - b.step_order;
-                });
-              const stepIndexInSequence = allStepsInSequence.findIndex(
-                (s) => s.step_order === currentStepOrder && s.day_number === dayNumber
-              );
-              if (stepIndexInSequence !== -1) {
-                overallStepNumber = stepIndexInSequence + 1; // 1-indexed
-              }
-            }
-            
-            // Store step info for display
-            currentStepInfo = {
-              isMultiStep,
-              stepType,
-              remainingSteps, // Number of steps remaining in multi-action (null if not multi-action)
-              stepName: currentStep.label || "Unknown", // Step name for single steps
-              dayNumber,
-              overallStepNumber, // Step number in overall sequence (null for multi-steps)
-            };
-            
-            // For display: first row shows step name or "Multi-step"
-            if (isMultiStep) {
-              currentStepLabel = "Multi-step";
-            } else {
-              currentStepLabel = currentStep.label || "Unknown";
-            }
-
-            // Calculate due date: join_date (started_at) + day_number
-            if (contact.started_at) {
-              const joinDate = new Date(contact.started_at);
-              joinDate.setHours(0, 0, 0, 0);
-              const dueDateObj = new Date(joinDate);
-              dueDateObj.setDate(joinDate.getDate() + (dayNumber || 0));
-              dueDate = dueDateObj.toISOString().split("T")[0];
-            } else {
-              // Fallback to today if started_at is not available
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const dueDateObj = new Date(today);
-              dueDateObj.setDate(today.getDate() + (dayNumber || 0));
-              dueDate = dueDateObj.toISOString().split("T")[0];
-            }
-          } else if (contact.step_label) {
-            currentStepLabel = contact.step_label;
-          }
-        } else if (contact.step_label) {
-          currentStepLabel = contact.step_label;
-        }
-
-        return {
-          id: contact.contact_cadence_id,
-          contactId: contact.contact_id,
-          company: fullContact.company || "—",
-          firstName: contact.first_name || "",
-          lastName: contact.last_name || "",
-          first_name: contact.first_name || "",
-          last_name: contact.last_name || "",
-          title: fullContact.title || "—",
-          email: fullContact.email || null,
-          mobile_phone: fullContact.mobile_phone || null,
-          phone: fullContact.mobile_phone || null,
-          linkedin_url: fullContact.linkedin_url || null,
-          tags: fullContact.tags || [],
-          currentStep: currentStepLabel,
-          dueOn: dueDate,
-          lastStepCompletedAt: null,
-          currentStepOrder: currentStepOrder,
-          dayNumber: personDayNumber,
-          stepInfo: currentStepInfo, // { isMultiStep, stepType, remainingSteps, stepName, dayNumber, overallStepNumber }
-        };
-      });
-      setPeopleInCadence(transformed);
+      setPeopleInCadence(
+        transformCadencePeople({
+          cadenceContacts,
+          allContacts,
+          cadenceStructure,
+        })
+      );
+      
       setSelectedContacts([]);
       alert(`✅ ${selectedContacts.length} contact(s) removed from cadence.`);
     } catch (err) {
@@ -1201,160 +789,19 @@ export default function CadenceDetailPage() {
   const handleAddContact = async (contact) => {
     try {
       await addContactToCadence(cadenceId, contact.id);
-      // Reload contacts using the same logic as the main useEffect
       const [cadenceContacts, allContacts] = await Promise.all([
         fetchCadenceContacts(cadenceId),
         fetchContacts(),
       ]);
       
-      const contactMap = new Map();
-      allContacts.forEach((c) => {
-        contactMap.set(c.id, c);
-      });
+      setPeopleInCadence(
+        transformCadencePeople({
+          cadenceContacts,
+          allContacts,
+          cadenceStructure,
+        })
+      );
       
-        // Use the same transformation logic as the main useEffect
-        // Trust the backend's current_step_order - don't override it
-        const transformed = cadenceContacts.map((contact) => {
-          const fullContact = contactMap.get(contact.contact_id) || {};
-          let currentStepOrder = contact.current_step_order;
-          
-          // Only set to first step if current_step_order is null (new contact)
-          // Find first step by day_number (lowest), then step_order (lowest within that day)
-          if (currentStepOrder === null && cadenceStructure.length > 0) {
-            const allSteps = cadenceStructure.flatMap((day) => day.actions);
-            // Sort by day_number first, then step_order
-            const sortedSteps = [...allSteps].sort((a, b) => {
-              if (a.day_number !== b.day_number) {
-                return a.day_number - b.day_number;
-              }
-              return a.step_order - b.step_order;
-            });
-            const firstStep = sortedSteps[0];
-            currentStepOrder = firstStep ? firstStep.step_order : null;
-          }
-        
-        let dueDate = null;
-        let currentStepLabel = "Not Started";
-        let currentStepInfo = { isMultiStep: false, stepType: null };
-        let personDayNumber = contact.day_number || null;
-        
-        if (currentStepOrder !== null && cadenceStructure.length > 0) {
-          // Find the step with matching step_order
-          const allSteps = cadenceStructure.flatMap((day) => day.actions);
-          const currentStep = allSteps.find((s) => s.step_order === currentStepOrder);
-          
-          if (currentStep) {
-            // Use day_number from the current step (more reliable than contact.day_number)
-            const dayNumber = currentStep.day_number;
-            personDayNumber = dayNumber;
-            
-            // Check if there are multiple actions on the same day_number (multi-step)
-            const daySteps = cadenceStructure
-              .find((d) => d.day === dayNumber)?.actions || [];
-            
-            // Determine if it's multi-step and get step type
-            const isMultiStep = daySteps.length > 1;
-            const stepType = currentStep.type || "task";
-            
-            // Calculate remaining steps for multi-action
-            let remainingSteps = null;
-            if (isMultiStep) {
-              // Sort day steps by step_order to find current position
-              const sortedDaySteps = [...daySteps].sort((a, b) => a.step_order - b.step_order);
-              const currentStepIndex = sortedDaySteps.findIndex(s => s.step_order === currentStepOrder);
-              
-              // #region agent log
-              fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:1141',message:'Remaining steps calculation (handleAddContact - FIXED)',data:{dayNumber,currentStepOrder,dayStepsCount:daySteps.length,sortedDaySteps:sortedDaySteps.map(s=>({step_order:s.step_order,label:s.label})),currentStepIndex,calculatedRemaining:sortedDaySteps.length - currentStepIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-              // #endregion
-              
-              if (currentStepIndex !== -1) {
-                // Fixed: removed the +1 to correctly count remaining steps
-                remainingSteps = sortedDaySteps.length - currentStepIndex;
-              }
-            }
-            
-            // Calculate overall step number in the cadence sequence
-            let overallStepNumber = null;
-            if (!isMultiStep) {
-              // Get all steps from all days, sorted by day_number then step_order
-              const allStepsInSequence = cadenceStructure
-                .flatMap((day) => day.actions)
-                .sort((a, b) => {
-                  if (a.day_number !== b.day_number) {
-                    return a.day_number - b.day_number;
-                  }
-                  return a.step_order - b.step_order;
-                });
-              const stepIndexInSequence = allStepsInSequence.findIndex(
-                (s) => s.step_order === currentStepOrder && s.day_number === dayNumber
-              );
-              if (stepIndexInSequence !== -1) {
-                overallStepNumber = stepIndexInSequence + 1; // 1-indexed
-              }
-            }
-            
-            // Store step info for display
-            currentStepInfo = {
-              isMultiStep,
-              stepType,
-              remainingSteps, // Number of steps remaining in multi-action (null if not multi-action)
-              stepName: currentStep.label || "Unknown", // Step name for single steps
-              dayNumber,
-              overallStepNumber, // Step number in overall sequence (null for multi-steps)
-            };
-            
-            // For display: first row shows step name or "Multi-step"
-            if (isMultiStep) {
-              currentStepLabel = "Multi-step";
-            } else {
-              currentStepLabel = currentStep.label || "Unknown";
-            }
-            
-            // Calculate due date: join_date (started_at) + day_number
-            if (contact.started_at) {
-              const joinDate = new Date(contact.started_at);
-              joinDate.setHours(0, 0, 0, 0);
-              const dueDateObj = new Date(joinDate);
-              dueDateObj.setDate(joinDate.getDate() + (dayNumber || 0));
-              dueDate = dueDateObj.toISOString().split("T")[0];
-            } else {
-              // Fallback to today if started_at is not available
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const dueDateObj = new Date(today);
-              dueDateObj.setDate(today.getDate() + (dayNumber || 0));
-              dueDate = dueDateObj.toISOString().split("T")[0];
-            }
-          } else if (contact.step_label) {
-            currentStepLabel = contact.step_label;
-          }
-        } else if (contact.step_label) {
-          currentStepLabel = contact.step_label;
-        }
-
-        return {
-          id: contact.contact_cadence_id,
-          contactId: contact.contact_id,
-          company: fullContact.company || "—",
-          firstName: contact.first_name || "",
-          lastName: contact.last_name || "",
-          first_name: contact.first_name || "", // For panel compatibility
-          last_name: contact.last_name || "", // For panel compatibility
-          title: fullContact.title || "—",
-          email: fullContact.email || null,
-          mobile_phone: fullContact.mobile_phone || null,
-          phone: fullContact.mobile_phone || null, // Alias for panel
-          linkedin_url: fullContact.linkedin_url || null,
-          tags: fullContact.tags || [],
-          currentStep: currentStepLabel,
-          dueOn: dueDate,
-          lastStepCompletedAt: null,
-          currentStepOrder: currentStepOrder,
-          dayNumber: personDayNumber,
-          stepInfo: currentStepInfo, // { isMultiStep, stepType, remainingSteps, stepName, dayNumber, overallStepNumber }
-        };
-      });
-      setPeopleInCadence(transformed);
     } catch (err) {
       console.error("Failed to add contact to cadence:", err);
       alert(err.message || "Failed to add contact to cadence. Please try again.");
@@ -1846,3 +1293,125 @@ export default function CadenceDetailPage() {
   );
 }
 
+function transformCadencePeople({
+  cadenceContacts,
+  allContacts,
+  cadenceStructure,
+}) {
+  // Build lookup maps once
+  const contactMap = new Map();
+  allContacts.forEach((c) => contactMap.set(c.id, c));
+
+  const allSteps = cadenceStructure.flatMap((d) => d.actions);
+
+  // Step order → step
+  const stepByOrder = new Map();
+  allSteps.forEach((s) => {
+    stepByOrder.set(s.step_order, s);
+  });
+
+  // Steps sorted by true execution order
+  const stepsInSequence = [...allSteps].sort((a, b) => {
+    if (a.day_number !== b.day_number) {
+      return a.day_number - b.day_number;
+    }
+    return a.step_order - b.step_order;
+  });
+
+  const firstStep = stepsInSequence[0] || null;
+
+  return cadenceContacts.map((cc) => {
+    const fullContact = contactMap.get(cc.contact_id) || {};
+
+    // 🔑 SOURCE OF TRUTH
+    let currentStepOrder = cc.current_step_order;
+
+    // Only default if backend truly has no step yet
+    if (currentStepOrder == null && firstStep) {
+      currentStepOrder = firstStep.step_order;
+    }
+
+    const step = stepByOrder.get(currentStepOrder) || null;
+
+    let dayNumber = step?.day_number ?? null;
+
+    // Multi-step logic
+    const daySteps =
+      dayNumber != null
+        ? cadenceStructure.find((d) => d.day === dayNumber)?.actions || []
+        : [];
+
+    const isMultiStep = daySteps.length > 1;
+
+    let remainingSteps = null;
+    if (isMultiStep && step) {
+      const sortedDaySteps = [...daySteps].sort(
+        (a, b) => a.step_order - b.step_order
+      );
+      const idx = sortedDaySteps.findIndex(
+        (s) => s.step_order === currentStepOrder
+      );
+      if (idx !== -1) {
+        remainingSteps = sortedDaySteps.length - idx;
+      }
+    }
+
+    // Overall step number (single-step only)
+    let overallStepNumber = null;
+    if (!isMultiStep && step) {
+      const idx = stepsInSequence.findIndex(
+        (s) =>
+          s.step_order === currentStepOrder &&
+          s.day_number === step.day_number
+      );
+      if (idx !== -1) {
+        overallStepNumber = idx + 1;
+      }
+    }
+
+    // Due date
+    let dueOn = null;
+    if (cc.started_at && dayNumber != null) {
+      const d = new Date(cc.started_at);
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() + dayNumber);
+      dueOn = d.toISOString().split("T")[0];
+    }
+
+    return {
+      id: cc.contact_cadence_id,
+      contactId: cc.contact_id,
+
+      company: fullContact.company || "—",
+      firstName: cc.first_name || "",
+      lastName: cc.last_name || "",
+      first_name: cc.first_name || "",
+      last_name: cc.last_name || "",
+      title: fullContact.title || "—",
+      email: fullContact.email || null,
+      mobile_phone: fullContact.mobile_phone || null,
+      phone: fullContact.mobile_phone || null,
+      linkedin_url: fullContact.linkedin_url || null,
+      tags: fullContact.tags || [],
+
+      currentStep: isMultiStep
+        ? "Multi-step"
+        : step?.label || "Not Started",
+
+      currentStepOrder,
+      dayNumber,
+
+      stepInfo: {
+        isMultiStep,
+        stepType: step?.type || "task",
+        remainingSteps,
+        stepName: step?.label || null,
+        dayNumber,
+        overallStepNumber,
+      },
+
+      dueOn,
+      lastStepCompletedAt: null,
+    };
+  });
+}
