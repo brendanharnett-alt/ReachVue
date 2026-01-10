@@ -392,20 +392,42 @@ export default function CadenceDetailPage() {
                 }
               }
               
-              // If there are multiple actions on the same day, it's a multi-action step
-              if (isMultiStep) {
-                currentStepLabel = `Day ${dayNumber}: Multi-Action`;
-              } else {
-                // Format: "Day N: Step <NAME>"
-                currentStepLabel = `Day ${dayNumber}: Step ${currentStep.label || "Unknown"}`;
+              // Calculate overall step number in the cadence sequence
+              let overallStepNumber = null;
+              if (!isMultiStep) {
+                // Get all steps from all days, sorted by day_number then step_order
+                const allStepsInSequence = cadenceStructure
+                  .flatMap((day) => day.actions)
+                  .sort((a, b) => {
+                    if (a.day_number !== b.day_number) {
+                      return a.day_number - b.day_number;
+                    }
+                    return a.step_order - b.step_order;
+                  });
+                const stepIndexInSequence = allStepsInSequence.findIndex(
+                  (s) => s.step_order === currentStepOrder && s.day_number === dayNumber
+                );
+                if (stepIndexInSequence !== -1) {
+                  overallStepNumber = stepIndexInSequence + 1; // 1-indexed
+                }
               }
               
-              // Store step info for icon rendering
+              // Store step info for display
               currentStepInfo = {
                 isMultiStep,
                 stepType,
                 remainingSteps, // Number of steps remaining in multi-action (null if not multi-action)
+                stepName: currentStep.label || "Unknown", // Step name for single steps
+                dayNumber,
+                overallStepNumber, // Step number in overall sequence (null for multi-steps)
               };
+              
+              // For display: first row shows step name or "Multi-step"
+              if (isMultiStep) {
+                currentStepLabel = "Multi-step";
+              } else {
+                currentStepLabel = currentStep.label || "Unknown";
+              }
               
               // #region agent log
               console.log('[DEBUG] Final step label', {currentStepLabel,dayNumber,personDayNumber});
@@ -650,18 +672,42 @@ export default function CadenceDetailPage() {
               }
             }
             
-            if (isMultiStep) {
-              currentStepLabel = `Day ${dayNumber}: Multi-Action`;
-            } else {
-              currentStepLabel = `Day ${dayNumber}: ${currentStep.label}`;
+            // Calculate overall step number in the cadence sequence
+            let overallStepNumber = null;
+            if (!isMultiStep) {
+              // Get all steps from all days, sorted by day_number then step_order
+              const allStepsInSequence = cadenceStructure
+                .flatMap((day) => day.actions)
+                .sort((a, b) => {
+                  if (a.day_number !== b.day_number) {
+                    return a.day_number - b.day_number;
+                  }
+                  return a.step_order - b.step_order;
+                });
+              const stepIndexInSequence = allStepsInSequence.findIndex(
+                (s) => s.step_order === currentStepOrder && s.day_number === dayNumber
+              );
+              if (stepIndexInSequence !== -1) {
+                overallStepNumber = stepIndexInSequence + 1; // 1-indexed
+              }
             }
             
-            // Store step info for icon rendering
+            // Store step info for display
             currentStepInfo = {
               isMultiStep,
               stepType,
               remainingSteps, // Number of steps remaining in multi-action (null if not multi-action)
+              stepName: currentStep.label || "Unknown", // Step name for single steps
+              dayNumber,
+              overallStepNumber, // Step number in overall sequence (null for multi-steps)
             };
+            
+            // For display: first row shows step name or "Multi-step"
+            if (isMultiStep) {
+              currentStepLabel = "Multi-step";
+            } else {
+              currentStepLabel = currentStep.label || "Unknown";
+            }
             
             // Calculate due date based on day_number
             const today = new Date();
@@ -1013,6 +1059,7 @@ export default function CadenceDetailPage() {
         }
         let dueDate = null;
         let currentStepLabel = "Not Started";
+        let currentStepInfo = { isMultiStep: false, stepType: null, remainingSteps: null, stepName: null, dayNumber: null, overallStepNumber: null };
         let personDayNumber = contact.day_number || null;
 
         if (currentStepOrder !== null && cadenceStructure.length > 0) {
@@ -1026,10 +1073,56 @@ export default function CadenceDetailPage() {
             const daySteps = cadenceStructure
               .find((d) => d.day === dayNumber)?.actions || [];
 
-            if (daySteps.length > 1) {
-              currentStepLabel = `Day ${dayNumber}: Multi-Action`;
+            // Determine if it's multi-step and get step type
+            const isMultiStep = daySteps.length > 1;
+            const stepType = currentStep.type || "task";
+            
+            // Calculate remaining steps for multi-action
+            let remainingSteps = null;
+            if (isMultiStep) {
+              // Sort day steps by step_order to find current position
+              const sortedDaySteps = [...daySteps].sort((a, b) => a.step_order - b.step_order);
+              const currentStepIndex = sortedDaySteps.findIndex(s => s.step_order === currentStepOrder);
+              if (currentStepIndex !== -1) {
+                remainingSteps = sortedDaySteps.length - currentStepIndex;
+              }
+            }
+            
+            // Calculate overall step number in the cadence sequence
+            let overallStepNumber = null;
+            if (!isMultiStep) {
+              // Get all steps from all days, sorted by day_number then step_order
+              const allStepsInSequence = cadenceStructure
+                .flatMap((day) => day.actions)
+                .sort((a, b) => {
+                  if (a.day_number !== b.day_number) {
+                    return a.day_number - b.day_number;
+                  }
+                  return a.step_order - b.step_order;
+                });
+              const stepIndexInSequence = allStepsInSequence.findIndex(
+                (s) => s.step_order === currentStepOrder && s.day_number === dayNumber
+              );
+              if (stepIndexInSequence !== -1) {
+                overallStepNumber = stepIndexInSequence + 1; // 1-indexed
+              }
+            }
+            
+            // Store step info for display
+            currentStepInfo = {
+              isMultiStep,
+              stepType,
+              remainingSteps, // Number of steps remaining in multi-action (null if not multi-action)
+              stepName: currentStep.label || "Unknown", // Step name for single steps
+              dayNumber,
+              overallStepNumber, // Step number in overall sequence (null for multi-steps)
+            };
+            
+            // For display: first row shows step name or "Multi-step"
+            if (isMultiStep) {
+              currentStepLabel = "Multi-step";
             } else {
-              currentStepLabel = `Day ${dayNumber}: Step ${currentStep.label || "Unknown"}`;
+              currentStepLabel = currentStep.label || "Unknown";
             }
 
             const today = new Date();
@@ -1062,6 +1155,7 @@ export default function CadenceDetailPage() {
           lastStepCompletedAt: null,
           currentStepOrder: currentStepOrder,
           dayNumber: personDayNumber,
+          stepInfo: currentStepInfo, // { isMultiStep, stepType, remainingSteps, stepName, dayNumber, overallStepNumber }
         };
       });
       setPeopleInCadence(transformed);
@@ -1148,20 +1242,42 @@ export default function CadenceDetailPage() {
               }
             }
             
-            // If there are multiple actions on the same day, it's a multi-action step
-            if (isMultiStep) {
-              currentStepLabel = `Day ${dayNumber}: Multi-Action`;
-            } else {
-              // Format: "Day N: Step <NAME>"
-              currentStepLabel = `Day ${dayNumber}: Step ${currentStep.label || "Unknown"}`;
+            // Calculate overall step number in the cadence sequence
+            let overallStepNumber = null;
+            if (!isMultiStep) {
+              // Get all steps from all days, sorted by day_number then step_order
+              const allStepsInSequence = cadenceStructure
+                .flatMap((day) => day.actions)
+                .sort((a, b) => {
+                  if (a.day_number !== b.day_number) {
+                    return a.day_number - b.day_number;
+                  }
+                  return a.step_order - b.step_order;
+                });
+              const stepIndexInSequence = allStepsInSequence.findIndex(
+                (s) => s.step_order === currentStepOrder && s.day_number === dayNumber
+              );
+              if (stepIndexInSequence !== -1) {
+                overallStepNumber = stepIndexInSequence + 1; // 1-indexed
+              }
             }
             
-            // Store step info for icon rendering
+            // Store step info for display
             currentStepInfo = {
               isMultiStep,
               stepType,
               remainingSteps, // Number of steps remaining in multi-action (null if not multi-action)
+              stepName: currentStep.label || "Unknown", // Step name for single steps
+              dayNumber,
+              overallStepNumber, // Step number in overall sequence (null for multi-steps)
             };
+            
+            // For display: first row shows step name or "Multi-step"
+            if (isMultiStep) {
+              currentStepLabel = "Multi-step";
+            } else {
+              currentStepLabel = currentStep.label || "Unknown";
+            }
             
             // Calculate due date: today + day_number (simplified - in real app would track join date)
             const today = new Date();
@@ -1368,37 +1484,44 @@ export default function CadenceDetailPage() {
                     </td>
                     <td className="p-2 text-gray-600 truncate max-w-[160px]">{person.title}</td>
                     <td className="p-2">
-                      <div className="flex items-center gap-2">
-                        {/* Step type icon */}
-                        {person.stepInfo?.isMultiStep ? (
-                          <Layers className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        ) : person.stepInfo?.stepType ? (
-                          (() => {
-                            const stepType = person.stepInfo.stepType.toLowerCase();
-                            if (stepType === "email") {
-                              return <Mail className="h-4 w-4 text-gray-500 flex-shrink-0" />;
-                            } else if (stepType === "phone" || stepType === "call") {
-                              return <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />;
-                            } else if (stepType === "linkedin") {
-                              return <Linkedin className="h-4 w-4 text-gray-500 flex-shrink-0" />;
-                            } else {
-                              return <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />;
-                            }
-                          })()
-                        ) : null}
-                        <div className="flex flex-col gap-0.5">
+                      <div className="flex flex-col gap-0.5">
+                        {/* First row: Icon + step name or "Multi-step" */}
+                        <div className="flex items-center gap-1.5">
+                          {person.stepInfo?.isMultiStep ? (
+                            <Layers className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                          ) : person.stepInfo?.stepType ? (
+                            (() => {
+                              const stepType = person.stepInfo.stepType.toLowerCase();
+                              if (stepType === "email") {
+                                return <Mail className="h-4 w-4 text-gray-500 flex-shrink-0" />;
+                              } else if (stepType === "phone" || stepType === "call") {
+                                return <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />;
+                              } else if (stepType === "linkedin") {
+                                return <Linkedin className="h-4 w-4 text-gray-500 flex-shrink-0" />;
+                              } else {
+                                return <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />;
+                              }
+                            })()
+                          ) : null}
                           <span
                             className="text-gray-700 cursor-pointer hover:text-gray-900"
                             onClick={() => handleStepTextClick(person)}
                           >
                             {person.currentStep}
                           </span>
-                          {person.stepInfo?.isMultiStep && person.stepInfo?.remainingSteps !== null && person.stepInfo?.remainingSteps > 0 && (
-                            <span className="text-xs text-gray-500">
-                              {person.stepInfo.remainingSteps} {person.stepInfo.remainingSteps === 1 ? 'step' : 'steps'} remaining
-                            </span>
-                          )}
                         </div>
+                        {/* Second row: "Day N: Step #" or "Day N: X remaining steps" */}
+                        {person.stepInfo?.dayNumber !== null && person.stepInfo?.dayNumber !== undefined && (
+                          <span className="text-xs text-gray-500">
+                            {person.stepInfo.isMultiStep ? (
+                              `Day ${person.stepInfo.dayNumber}: ${person.stepInfo.remainingSteps || 0} remaining steps`
+                            ) : person.stepInfo.overallStepNumber ? (
+                              `Day ${person.stepInfo.dayNumber}: Step ${person.stepInfo.overallStepNumber}`
+                            ) : (
+                              `Day ${person.stepInfo.dayNumber}`
+                            )}
+                          </span>
+                        )}
                       </div>
                     </td>
                     {!selectedContact && (
