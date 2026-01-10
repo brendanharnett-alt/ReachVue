@@ -1259,7 +1259,8 @@ app.get('/cadences/:cadenceId/contacts', async (req, res) => {
         c.last_name,
         cc.current_step_order,
         cs.step_label,
-        cs.day_number
+        cs.day_number,
+        cc.started_at
       FROM contact_cadences cc
       JOIN contacts c ON c.id = cc.contact_id
       LEFT JOIN cadence_steps cs

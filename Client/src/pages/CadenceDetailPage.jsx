@@ -433,11 +433,22 @@ export default function CadenceDetailPage() {
               console.log('[DEBUG] Final step label', {currentStepLabel,dayNumber,personDayNumber});
               // #endregion
               
-              // Calculate due date: today + day_number (simplified - in real app would track join date)
-              const today = new Date();
-              const dueDateObj = new Date(today);
-              dueDateObj.setDate(today.getDate() + (dayNumber || 0));
-              dueDate = dueDateObj.toISOString().split("T")[0];
+              // Calculate due date: join_date (started_at) + day_number
+              // The started_at field from backend represents when the contact was added to the cadence (Day 0)
+              if (contact.started_at) {
+                const joinDate = new Date(contact.started_at);
+                joinDate.setHours(0, 0, 0, 0);
+                const dueDateObj = new Date(joinDate);
+                dueDateObj.setDate(joinDate.getDate() + (dayNumber || 0));
+                dueDate = dueDateObj.toISOString().split("T")[0];
+              } else {
+                // Fallback to today if started_at is not available
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const dueDateObj = new Date(today);
+                dueDateObj.setDate(today.getDate() + (dayNumber || 0));
+                dueDate = dueDateObj.toISOString().split("T")[0];
+              }
             } else if (contact.step_label) {
               currentStepLabel = contact.step_label;
             }
@@ -709,12 +720,21 @@ export default function CadenceDetailPage() {
               currentStepLabel = currentStep.label || "Unknown";
             }
             
-            // Calculate due date based on day_number
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const dueDateObj = new Date(today);
-            dueDateObj.setDate(today.getDate() + dayNumber);
-            dueDate = dueDateObj.toISOString().split("T")[0];
+            // Calculate due date: join_date (started_at) + day_number
+            if (contact.started_at) {
+              const joinDate = new Date(contact.started_at);
+              joinDate.setHours(0, 0, 0, 0);
+              const dueDateObj = new Date(joinDate);
+              dueDateObj.setDate(joinDate.getDate() + dayNumber);
+              dueDate = dueDateObj.toISOString().split("T")[0];
+            } else {
+              // Fallback to today if started_at is not available
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const dueDateObj = new Date(today);
+              dueDateObj.setDate(today.getDate() + dayNumber);
+              dueDate = dueDateObj.toISOString().split("T")[0];
+            }
           } else if (contact.step_label) {
             currentStepLabel = contact.step_label;
           }
@@ -1125,10 +1145,21 @@ export default function CadenceDetailPage() {
               currentStepLabel = currentStep.label || "Unknown";
             }
 
-            const today = new Date();
-            const dueDateObj = new Date(today);
-            dueDateObj.setDate(today.getDate() + (dayNumber || 0));
-            dueDate = dueDateObj.toISOString().split("T")[0];
+            // Calculate due date: join_date (started_at) + day_number
+            if (contact.started_at) {
+              const joinDate = new Date(contact.started_at);
+              joinDate.setHours(0, 0, 0, 0);
+              const dueDateObj = new Date(joinDate);
+              dueDateObj.setDate(joinDate.getDate() + (dayNumber || 0));
+              dueDate = dueDateObj.toISOString().split("T")[0];
+            } else {
+              // Fallback to today if started_at is not available
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const dueDateObj = new Date(today);
+              dueDateObj.setDate(today.getDate() + (dayNumber || 0));
+              dueDate = dueDateObj.toISOString().split("T")[0];
+            }
           } else if (contact.step_label) {
             currentStepLabel = contact.step_label;
           }
@@ -1279,11 +1310,21 @@ export default function CadenceDetailPage() {
               currentStepLabel = currentStep.label || "Unknown";
             }
             
-            // Calculate due date: today + day_number (simplified - in real app would track join date)
-            const today = new Date();
-            const dueDateObj = new Date(today);
-            dueDateObj.setDate(today.getDate() + (dayNumber || 0));
-            dueDate = dueDateObj.toISOString().split("T")[0];
+            // Calculate due date: join_date (started_at) + day_number
+            if (contact.started_at) {
+              const joinDate = new Date(contact.started_at);
+              joinDate.setHours(0, 0, 0, 0);
+              const dueDateObj = new Date(joinDate);
+              dueDateObj.setDate(joinDate.getDate() + (dayNumber || 0));
+              dueDate = dueDateObj.toISOString().split("T")[0];
+            } else {
+              // Fallback to today if started_at is not available
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const dueDateObj = new Date(today);
+              dueDateObj.setDate(today.getDate() + (dayNumber || 0));
+              dueDate = dueDateObj.toISOString().split("T")[0];
+            }
           } else if (contact.step_label) {
             currentStepLabel = contact.step_label;
           }
@@ -1310,7 +1351,7 @@ export default function CadenceDetailPage() {
           lastStepCompletedAt: null,
           currentStepOrder: currentStepOrder,
           dayNumber: personDayNumber,
-          stepInfo: currentStepInfo, // { isMultiStep, stepType }
+          stepInfo: currentStepInfo, // { isMultiStep, stepType, remainingSteps, stepName, dayNumber, overallStepNumber }
         };
       });
       setPeopleInCadence(transformed);
