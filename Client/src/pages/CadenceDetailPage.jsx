@@ -1459,7 +1459,6 @@ export default function CadenceDetailPage() {
                 </th>
                 <th className="p-2 pl-4 text-left font-medium">Company</th>
                 <th className="p-2 text-left font-medium">Full Name</th>
-                <th className="p-2 text-left font-medium">Title</th>
                 <th className="p-2 text-left font-medium">Current Step</th>
                 {!selectedContact && (
                   <>
@@ -1473,13 +1472,13 @@ export default function CadenceDetailPage() {
             <tbody>
               {loadingContacts ? (
                 <tr>
-                  <td colSpan={selectedContact ? 5 : 8} className="p-8 text-center text-gray-500">
+                  <td colSpan={selectedContact ? 4 : 7} className="p-8 text-center text-gray-500">
                     Loading contacts...
                   </td>
                 </tr>
               ) : peopleInCadence.length === 0 ? (
                 <tr>
-                  <td colSpan={selectedContact ? 5 : 8} className="p-8 text-center text-gray-500">
+                  <td colSpan={selectedContact ? 4 : 7} className="p-8 text-center text-gray-500">
                     No contacts in this cadence yet. Click "Add to Cadence" to get started.
                   </td>
                 </tr>
@@ -1507,23 +1506,27 @@ export default function CadenceDetailPage() {
                       {person.company}
                     </td>
                     <td className="p-2 text-gray-700">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="cursor-pointer hover:text-blue-600 hover:underline truncate max-w-[140px]"
-                          onClick={() => setSelectedContact(person)}
-                        >
-                          {person.firstName} {person.lastName}
-                        </span>
-                        <button
-                          className="opacity-0 group-hover:opacity-100 transition-opacity h-3.5 w-3.5 rounded-sm bg-[#0077B5] flex items-center justify-center hover:bg-[#006399]"
-                          onClick={handleLinkedInClick}
-                          title="Open LinkedIn Profile"
-                        >
-                          <span className="text-[8px] font-bold text-white leading-none">in</span>
-                        </button>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="cursor-pointer hover:text-blue-600 hover:underline truncate max-w-[140px]"
+                            onClick={() => setSelectedContact(person)}
+                          >
+                            {person.firstName} {person.lastName}
+                          </span>
+                          <button
+                            className="opacity-0 group-hover:opacity-100 transition-opacity h-3.5 w-3.5 rounded-sm bg-[#0077B5] flex items-center justify-center hover:bg-[#006399]"
+                            onClick={handleLinkedInClick}
+                            title="Open LinkedIn Profile"
+                          >
+                            <span className="text-[8px] font-bold text-white leading-none">in</span>
+                          </button>
+                        </div>
+                        {person.title && (
+                          <span className="text-xs text-gray-600 truncate max-w-[160px]">{person.title}</span>
+                        )}
                       </div>
                     </td>
-                    <td className="p-2 text-gray-600 truncate max-w-[160px]">{person.title}</td>
                     <td className="p-2">
                       <div className="flex flex-col gap-0.5">
                         {/* First row: Icon + step name or "Multi-step" */}
