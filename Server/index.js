@@ -1070,9 +1070,15 @@ app.post('/cadences/:cadenceId/contacts', async (req, res) => {
 
     await pool.query(
       `
-      INSERT INTO contact_cadences (contact_id, cadence_id, current_step_order)
-      VALUES ($1, $2, $3)
-      ON CONFLICT DO NOTHING
+      INSERT INTO contact_cadences (
+  contact_id,
+  cadence_id,
+  current_step_order,
+  anchor_date
+)
+VALUES ($1, $2, $3, CURRENT_DATE)
+ON CONFLICT DO NOTHING
+
       `,
       [contact_id, cadenceId, firstStepOrder]
     );
@@ -1215,15 +1221,27 @@ app.put('/contact-cadences/:id/skip-step', async (req, res) => {
     }
 
     // Update current_step_order - ONLY for this specific contact_cadence_id
+    
+    
+   
+   
     const updateResult = await pool.query(
       `
       UPDATE contact_cadences
-      SET current_step_order = $1, updated_at = NOW()
-      WHERE id = $2 AND ended_at IS NULL
+      SET
+        current_step_order = $1,
+        updated_at = NOW()
+      WHERE id = $2
+        AND ended_at IS NULL
       RETURNING id, contact_id, current_step_order
       `,
-      [nextStepOrder, id]
+      [
+        nextStepOrder,
+        id
+      ]
     );
+    
+    
 
     console.log('[SKIP STEP] Update result:', { 
       rowsUpdated: updateResult.rowCount,
@@ -1253,22 +1271,24 @@ app.get('/cadences/:cadenceId/contacts', async (req, res) => {
     const result = await pool.query(
       `
       SELECT
-        cc.id AS contact_cadence_id,
-        c.id AS contact_id,
-        c.first_name,
-        c.last_name,
-        cc.current_step_order,
-        cs.step_label,
-        cs.day_number,
-        cc.started_at
-      FROM contact_cadences cc
-      JOIN contacts c ON c.id = cc.contact_id
-      LEFT JOIN cadence_steps cs
-        ON cs.cadence_id = cc.cadence_id
-       AND cs.step_order = cc.current_step_order
-      WHERE cc.cadence_id = $1
-        AND cc.ended_at IS NULL
-      ORDER BY c.last_name, c.first_name
+  cc.id AS contact_cadence_id,
+  c.id AS contact_id,
+  c.first_name,
+  c.last_name,
+  cc.current_step_order,
+  cs.step_label,
+  cs.day_number,
+  cc.anchor_date,
+  TO_CHAR(cc.anchor_date + cs.day_number, 'YYYY-MM-DD') AS due_on
+FROM contact_cadences cc
+JOIN contacts c ON c.id = cc.contact_id
+LEFT JOIN cadence_steps cs
+  ON cs.cadence_id = cc.cadence_id
+ AND cs.step_order = cc.current_step_order
+WHERE cc.cadence_id = $1
+  AND cc.ended_at IS NULL
+ORDER BY c.last_name, c.first_name
+
       `,
       [cadenceId]
     );

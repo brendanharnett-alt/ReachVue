@@ -155,10 +155,14 @@ const generateCadenceStructure = (cadenceId) => {
 // Format date as "June 15th, 2025"
 function formatDateWithOrdinal(dateString) {
   if (!dateString) return "—";
-  const date = new Date(dateString);
-  const day = date.getDate();
-  const month = date.toLocaleString("en-US", { month: "long" });
-  const year = date.getFullYear();
+
+  // Parse yyyy-mm-dd as LOCAL date
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+
+  const dayNum = date.getDate();
+  const monthName = date.toLocaleString("en-US", { month: "long" });
+  const yearNum = date.getFullYear();
 
   const getOrdinal = (n) => {
     if (n > 3 && n < 21) return "th";
@@ -174,8 +178,9 @@ function formatDateWithOrdinal(dateString) {
     }
   };
 
-  return `${month} ${day}${getOrdinal(day)}, ${year}`;
+  return `${monthName} ${dayNum}${getOrdinal(dayNum)}, ${yearNum}`;
 }
+
 
 // Format relative time like "3 Days Ago" or absolute date
 function formatLastStepCompleted(dateString) {
@@ -202,16 +207,7 @@ function isPastDue(dateString) {
   return dueDate < today;
 }
 
-// Compute due date from started date and day number
-function computeDueDate(startedAt, dayNumber) {
-  if (startedAt === null || startedAt === undefined || dayNumber === null || dayNumber === undefined) {
-    return null;
-  }
-  const date = new Date(startedAt);
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() + dayNumber);
-  return date.toISOString().split("T")[0];
-}
+
 
 // Add unique IDs to actions if they don't have them
 function ensureActionIds(structure) {
@@ -1369,14 +1365,9 @@ function transformCadencePeople({
       }
     }
 
-    // Due date
-    let dueOn = null;
-    if (cc.started_at && dayNumber != null) {
-      const d = new Date(cc.started_at);
-      d.setHours(0, 0, 0, 0);
-      d.setDate(d.getDate() + dayNumber);
-      dueOn = d.toISOString().split("T")[0];
-    }
+    const dueOn = cc.due_on || null;
+
+
 
     return {
       id: cc.contact_cadence_id,
