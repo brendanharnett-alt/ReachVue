@@ -1496,7 +1496,10 @@ function transformCadencePeople({
       }
     }
 
-    const dueOn = cc.due_on || null;
+    const dueOn = cc.due_on
+  ? cc.due_on.split("T")[0]   // normalize to YYYY-MM-DD
+  : null;
+
 
 
 

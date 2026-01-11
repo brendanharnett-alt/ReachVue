@@ -1064,53 +1064,93 @@ app.post('/cadences/:cadenceId/contacts', async (req, res) => {
       INSERT INTO contact_cadences (
         contact_id,
         cadence_id,
-        anchor_date
+        anchor_date,
+        started_at,
+        updated_at
       )
-      VALUES ($1, $2, CURRENT_DATE)
-      ON CONFLICT DO NOTHING
+      VALUES ($1, $2, CURRENT_DATE, NOW(), NOW())
+      ON CONFLICT (contact_id, cadence_id)
+        WHERE ended_at IS NULL
+      DO NOTHING
       RETURNING id
       `,
       [contact_id, cadenceId]
     );
 
-    // Idempotent case: already in cadence
-    if (contactCadenceResult.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return res.status(200).json({
-        success: true,
-        message: 'Contact already in cadence',
-      });
+    // If already exists, fetch existing id
+    let contactCadenceId;
+    if (contactCadenceResult.rowCount > 0) {
+      contactCadenceId = contactCadenceResult.rows[0].id;
+    } else {
+      const existing = await client.query(
+        `
+        SELECT id
+        FROM contact_cadences
+        WHERE contact_id = $1
+          AND cadence_id = $2
+          AND ended_at IS NULL
+        `,
+        [contact_id, cadenceId]
+      );
+
+      contactCadenceId = existing.rows[0].id;
     }
 
-    const contactCadenceId = contactCadenceResult.rows[0].id;
+    // 2. Fetch cadence steps
+    const stepsResult = await client.query(
+      `
+      SELECT id, day_number
+      FROM cadence_steps
+      WHERE cadence_id = $1
+        AND is_active = true
+      `,
+      [cadenceId]
+    );
 
-    // 2. Create step state rows
+    // 3. Seed cadence_step_states
+    for (const step of stepsResult.rows) {
+      await client.query(
+        `
+        INSERT INTO cadence_step_states (
+          contact_cadence_id,
+          cadence_step_id,
+          status,
+          due_on,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          $1,
+          $2,
+          'pending',
+          CURRENT_DATE + ($3 * INTERVAL '1 day'),
+          NOW(),
+          NOW()
+        )
+        ON CONFLICT (contact_cadence_id, cadence_step_id)
+        DO NOTHING
+        `,
+        [contactCadenceId, step.id, step.day_number]
+      );
+    }
+
+    // 4. Log history (optional but recommended)
     await client.query(
       `
-      INSERT INTO cadence_step_states (
-        contact_cadence_id,
-        cadence_step_id,
-        status,
-        due_on
-      )
-      SELECT
-        $1,
-        cs.id,
-        'pending',
-        CURRENT_DATE + cs.day_number
-      FROM cadence_steps cs
-      WHERE cs.cadence_id = $2
-        AND cs.is_active = true
+      INSERT INTO contact_cadence_history
+      (contact_cadence_id, event_type, event_at)
+      VALUES ($1, 'added', NOW())
       `,
-      [contactCadenceId, cadenceId]
+      [contactCadenceId]
     );
 
     await client.query('COMMIT');
 
     res.status(201).json({
       success: true,
-      message: 'Contact added to cadence',
+      contact_cadence_id: contactCadenceId
     });
+
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error adding contact to cadence:', err);
@@ -1119,6 +1159,7 @@ app.post('/cadences/:cadenceId/contacts', async (req, res) => {
     client.release();
   }
 });
+
 
 
 
@@ -1225,7 +1266,7 @@ app.put('/contact-cadences/:id/skip-step', async (req, res) => {
     await client.query(
       `
       INSERT INTO contact_cadence_history
-      (contact_cadence_id, cadence_step_id, event_type, created_at)
+      (contact_cadence_id, cadence_step_id, event_type, event_at)
       VALUES ($1, $2, 'skipped', NOW())
       `,
       [contactCadenceId, cadence_step_id]
