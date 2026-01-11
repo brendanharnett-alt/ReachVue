@@ -1154,115 +1154,113 @@ app.delete('/contact-cadences/:id', async (req, res) => {
 });
 
 app.put('/contact-cadences/:id/skip-step', async (req, res) => {
-  const { id } = req.params; // contact_cadence_id
+  const contactCadenceId = req.params.id;
+  const { cadence_step_id } = req.body; // REQUIRED
+
+  if (!cadence_step_id) {
+    return res.status(400).send('cadence_step_id is required');
+  }
+
+  const client = await pool.connect();
 
   try {
-    // First, get the current contact_cadence record to find cadence_id and current_step_order
-    const contactCadenceResult = await pool.query(
-      `SELECT cadence_id, current_step_order FROM contact_cadences WHERE id = $1 AND ended_at IS NULL`,
-      [id]
-    );
+    await client.query('BEGIN');
 
-    if (contactCadenceResult.rowCount === 0) {
-      return res.status(404).send('Active contact cadence not found');
-    }
-
-    const { cadence_id, current_step_order } = contactCadenceResult.rows[0];
-    console.log('[SKIP STEP] Current state:', { contact_cadence_id: id, cadence_id, current_step_order });
-
-    // Get all active steps for this cadence, ordered by day_number then step_order
-    // This ensures lower day numbers come before higher day numbers
-    const stepsResult = await pool.query(
+    // 1. Mark step as skipped
+    const stepResult = await client.query(
       `
-      SELECT id, step_order, day_number, step_label
-      FROM cadence_steps
-      WHERE cadence_id = $1 AND is_active = true
-      ORDER BY day_number ASC, step_order ASC
-      `,
-      [cadence_id]
-    );
-
-    if (stepsResult.rowCount === 0) {
-      return res.status(404).send('No active steps found for this cadence');
-    }
-
-    const allSteps = stepsResult.rows;
-    console.log('[SKIP STEP] All steps (ordered by day_number, step_order):', allSteps.map(s => ({ step_order: s.step_order, day_number: s.day_number, label: s.step_label })));
-    
-    // Find current step index
-    let currentStepIndex = -1;
-    if (current_step_order !== null) {
-      currentStepIndex = allSteps.findIndex(step => step.step_order === current_step_order);
-    }
-
-    console.log('[SKIP STEP] Current step index:', currentStepIndex);
-
-    // Find next step - respect day_number ordering
-    let nextStepOrder = null;
-    
-    if (currentStepIndex === -1) {
-      // No current step, move to first step (lowest day_number, lowest step_order)
-      nextStepOrder = allSteps[0].step_order;
-      console.log('[SKIP STEP] No current step, moving to first:', nextStepOrder);
-    } else if (currentStepIndex < allSteps.length - 1) {
-      // There's a next step in the sequence (by day_number, then step_order)
-      const nextStep = allSteps[currentStepIndex + 1];
-      nextStepOrder = nextStep.step_order;
-      console.log('[SKIP STEP] Moving to next step:', { 
-        from: allSteps[currentStepIndex].step_order, 
-        to: nextStepOrder,
-        from_day: allSteps[currentStepIndex].day_number,
-        to_day: nextStep.day_number
-      });
-    } else {
-      // Already at the last step - stay at current step (don't advance)
-      nextStepOrder = current_step_order;
-      console.log('[SKIP STEP] Already at last step, staying:', nextStepOrder);
-    }
-
-    // Update current_step_order - ONLY for this specific contact_cadence_id
-    
-    
-   
-   
-    const updateResult = await pool.query(
-      `
-      UPDATE contact_cadences
+      UPDATE cadence_step_states
       SET
-        current_step_order = $1,
+        status = 'skipped',
+        skipped_at = NOW(),
         updated_at = NOW()
-      WHERE id = $2
-        AND ended_at IS NULL
-      RETURNING id, contact_id, current_step_order
+      WHERE contact_cadence_id = $1
+        AND cadence_step_id = $2
+        AND status = 'pending'
+      RETURNING *
       `,
-      [
-        nextStepOrder,
-        id
-      ]
+      [contactCadenceId, cadence_step_id]
     );
-    
-    
 
-    console.log('[SKIP STEP] Update result:', { 
-      rowsUpdated: updateResult.rowCount,
-      updatedRecord: updateResult.rows[0] 
-    });
-    
-    if (updateResult.rowCount === 0) {
-      console.error('[SKIP STEP] No rows updated!', { id, nextStepOrder });
-      return res.status(404).send('Contact cadence not found or already ended');
+    if (stepResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).send('Pending step not found');
     }
 
-    res.json({ 
-      success: true, 
-      current_step_order: nextStepOrder,
-      message: 'Step advanced successfully' 
+    const skippedStep = stepResult.rows[0];
+
+    // 2. Log history
+    await client.query(
+      `
+      INSERT INTO contact_cadence_history
+      (contact_cadence_id, cadence_step_id, event_type, created_at)
+      VALUES ($1, $2, 'skipped', NOW())
+      `,
+      [contactCadenceId, cadence_step_id]
+    );
+
+    // 3. Get day_number of skipped step
+    const dayResult = await client.query(
+      `
+      SELECT day_number
+      FROM cadence_steps
+      WHERE id = $1
+      `,
+      [cadence_step_id]
+    );
+
+    const completedDay = dayResult.rows[0].day_number;
+
+    // 4. Check if all steps for that day are now done
+    const pendingDaySteps = await client.query(
+      `
+      SELECT 1
+      FROM cadence_step_states css
+      JOIN cadence_steps cs ON cs.id = css.cadence_step_id
+      WHERE css.contact_cadence_id = $1
+        AND cs.day_number = $2
+        AND css.status = 'pending'
+      LIMIT 1
+      `,
+      [contactCadenceId, completedDay]
+    );
+
+    const dayIsComplete = pendingDaySteps.rowCount === 0;
+
+    // 5. If day completed → re-anchor all future pending steps
+    if (dayIsComplete) {
+      await client.query(
+        `
+        UPDATE cadence_step_states css
+        SET
+          due_on = CURRENT_DATE + (cs.day_number - $2),
+          updated_at = NOW()
+        FROM cadence_steps cs
+        WHERE css.cadence_step_id = cs.id
+          AND css.contact_cadence_id = $1
+          AND css.status = 'pending'
+          AND cs.day_number > $2
+        `,
+        [contactCadenceId, completedDay]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      dayCompleted: dayIsComplete
     });
+
   } catch (err) {
-    console.error('Error skipping step:', err);
+    await client.query('ROLLBACK');
+    console.error('Skip step error:', err);
     res.status(500).send('Failed to skip step');
+  } finally {
+    client.release();
   }
 });
+
 
 app.get('/cadences/:cadenceId/contacts', async (req, res) => {
   const { cadenceId } = req.params;
@@ -1270,25 +1268,65 @@ app.get('/cadences/:cadenceId/contacts', async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT
-  cc.id AS contact_cadence_id,
-  c.id AS contact_id,
-  c.first_name,
-  c.last_name,
-  cc.current_step_order,
-  cs.step_label,
-  cs.day_number,
-  cc.anchor_date,
-  TO_CHAR(cc.anchor_date + cs.day_number, 'YYYY-MM-DD') AS due_on
-FROM contact_cadences cc
-JOIN contacts c ON c.id = cc.contact_id
-LEFT JOIN cadence_steps cs
-  ON cs.cadence_id = cc.cadence_id
- AND cs.step_order = cc.current_step_order
-WHERE cc.cadence_id = $1
-  AND cc.ended_at IS NULL
-ORDER BY c.last_name, c.first_name
+      WITH pending_days AS (
+        SELECT
+          css.contact_cadence_id,
+          MIN(cs.day_number) AS current_day
+        FROM cadence_step_states css
+        JOIN cadence_steps cs ON cs.id = css.cadence_step_id
+        WHERE css.status = 'pending'
+        GROUP BY css.contact_cadence_id
+      ),
+      day_stats AS (
+        SELECT
+          css.contact_cadence_id,
+          cs.day_number,
 
+          COUNT(*) AS total_steps_in_day,
+          COUNT(*) FILTER (
+            WHERE css.status IN ('completed', 'skipped')
+          ) AS completed_steps_in_day,
+          COUNT(*) FILTER (
+            WHERE css.status = 'pending'
+          ) AS pending_steps_in_day,
+
+          MIN(css.due_on) FILTER (
+            WHERE css.status = 'pending'
+          ) AS due_on
+        FROM cadence_step_states css
+        JOIN cadence_steps cs ON cs.id = css.cadence_step_id
+        GROUP BY css.contact_cadence_id, cs.day_number
+      )
+      SELECT
+        cc.id AS contact_cadence_id,
+        c.id AS contact_id,
+        c.first_name,
+        c.last_name,
+
+        pd.current_day,
+
+        ds.total_steps_in_day,
+        ds.completed_steps_in_day,
+        ds.pending_steps_in_day,
+
+        (ds.total_steps_in_day > 1) AS is_multi_step,
+        ds.due_on
+
+      FROM contact_cadences cc
+      JOIN contacts c
+        ON c.id = cc.contact_id
+
+      JOIN pending_days pd
+        ON pd.contact_cadence_id = cc.id
+
+      JOIN day_stats ds
+        ON ds.contact_cadence_id = cc.id
+       AND ds.day_number = pd.current_day
+
+      WHERE cc.cadence_id = $1
+        AND cc.ended_at IS NULL
+
+      ORDER BY c.last_name, c.first_name
       `,
       [cadenceId]
     );
@@ -1299,6 +1337,7 @@ ORDER BY c.last_name, c.first_name
     res.status(500).send('Failed to fetch cadence contacts');
   }
 });
+
 
 app.get('/cadences/:cadenceId/steps', async (req, res) => {
   const { cadenceId } = req.params;
@@ -1337,4 +1376,172 @@ app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
 
+app.put('/contact-cadences/:id/complete-step', async (req, res) => {
+  const contactCadenceId = req.params.id;
+  const { cadence_step_id } = req.body; // REQUIRED
+
+  if (!cadence_step_id) {
+    return res.status(400).send('cadence_step_id is required');
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 1. Mark step as completed
+    const stepResult = await client.query(
+      `
+      UPDATE cadence_step_states
+      SET
+        status = 'completed',
+        completed_at = NOW(),
+        updated_at = NOW()
+      WHERE contact_cadence_id = $1
+        AND cadence_step_id = $2
+        AND status = 'pending'
+      RETURNING *
+      `,
+      [contactCadenceId, cadence_step_id]
+    );
+
+    if (stepResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).send('Pending step not found');
+    }
+
+    const completedStep = stepResult.rows[0];
+
+    // 2. Log history
+    await client.query(
+      `
+      INSERT INTO contact_cadence_history
+      (contact_cadence_id, cadence_step_id, event_type, created_at)
+      VALUES ($1, $2, 'completed', NOW())
+      `,
+      [contactCadenceId, cadence_step_id]
+    );
+
+    // 3. Get day_number of completed step
+    const dayResult = await client.query(
+      `
+      SELECT day_number
+      FROM cadence_steps
+      WHERE id = $1
+      `,
+      [cadence_step_id]
+    );
+
+    const completedDay = dayResult.rows[0].day_number;
+
+    // 4. Check if all steps for that day are now done
+    const pendingDaySteps = await client.query(
+      `
+      SELECT 1
+      FROM cadence_step_states css
+      JOIN cadence_steps cs ON cs.id = css.cadence_step_id
+      WHERE css.contact_cadence_id = $1
+        AND cs.day_number = $2
+        AND css.status = 'pending'
+      LIMIT 1
+      `,
+      [contactCadenceId, completedDay]
+    );
+
+    const dayIsComplete = pendingDaySteps.rowCount === 0;
+
+    // 5. If day completed → re-anchor all future pending steps
+    if (dayIsComplete) {
+      await client.query(
+        `
+        UPDATE cadence_step_states css
+        SET
+          due_on = CURRENT_DATE + (cs.day_number - $2),
+          updated_at = NOW()
+        FROM cadence_steps cs
+        WHERE css.cadence_step_id = cs.id
+          AND css.contact_cadence_id = $1
+          AND css.status = 'pending'
+          AND cs.day_number > $2
+        `,
+        [contactCadenceId, completedDay]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      dayCompleted: dayIsComplete
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Complete step error:', err);
+    res.status(500).send('Failed to complete step');
+  } finally {
+    client.release();
+  }
+});
+
+app.put('/contact-cadences/:id/postpone-step', async (req, res) => {
+  const contactCadenceId = req.params.id;
+  const { cadence_step_id, postpone_days } = req.body;
+
+  if (!cadence_step_id || !postpone_days || postpone_days <= 0) {
+    return res
+      .status(400)
+      .send('cadence_step_id and positive postpone_days are required');
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 1. Update due_on for the pending step
+    const updateResult = await client.query(
+      `
+      UPDATE cadence_step_states
+      SET
+        due_on = due_on + ($3 || ' days')::interval,
+        updated_at = NOW()
+      WHERE contact_cadence_id = $1
+        AND cadence_step_id = $2
+        AND status = 'pending'
+      RETURNING *
+      `,
+      [contactCadenceId, cadence_step_id, postpone_days]
+    );
+
+    if (updateResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).send('Pending step not found');
+    }
+
+    // 2. Log history
+    await client.query(
+      `
+      INSERT INTO contact_cadence_history
+      (contact_cadence_id, cadence_step_id, event_type, metadata, event_at)
+      VALUES ($1, $2, 'postponed', jsonb_build_object('postpone_days', $3), NOW())
+      `,
+      [contactCadenceId, cadence_step_id, postpone_days]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      postponed_by_days: postpone_days
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Postpone step error:', err);
+    res.status(500).send('Failed to postpone step');
+  } finally {
+    client.release();
+  }
+});
 
