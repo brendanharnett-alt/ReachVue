@@ -298,11 +298,12 @@ export async function removeContactFromCadence(contactCadenceId) {
   }
 }
 
-export async function skipCadenceStep(contactCadenceId) {
+export async function skipCadenceStep(contactCadenceId, cadenceStepId) {
   try {
     const res = await fetch(`${BASE_URL}/contact-cadences/${contactCadenceId}/skip-step`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cadence_step_id: cadenceStepId }),
     })
     if (!res.ok) {
       const errorText = await res.text()
@@ -312,6 +313,55 @@ export async function skipCadenceStep(contactCadenceId) {
   } catch (err) {
     console.error("Skip cadence step error:", err)
     throw err
+  }
+}
+
+export async function completeCadenceStep(contactCadenceId, cadenceStepId) {
+  try {
+    const res = await fetch(`${BASE_URL}/contact-cadences/${contactCadenceId}/complete-step`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cadence_step_id: cadenceStepId }),
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || "Failed to complete step")
+    }
+    return await res.json()
+  } catch (err) {
+    console.error("Complete cadence step error:", err)
+    throw err
+  }
+}
+
+export async function postponeCadenceStep(contactCadenceId, cadenceStepId, postponeDays) {
+  try {
+    const res = await fetch(`${BASE_URL}/contact-cadences/${contactCadenceId}/postpone-step`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        cadence_step_id: cadenceStepId,
+        postpone_days: postponeDays 
+      }),
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || "Failed to postpone step")
+    }
+    return await res.json()
+  } catch (err) {
+    console.error("Postpone cadence step error:", err)
+    throw err
+  }
+}
+
+export async function fetchCadenceById(cadenceId) {
+  try {
+    const cadences = await fetchCadences()
+    return cadences.find(c => c.id === cadenceId) || null
+  } catch (err) {
+    console.error("Fetch cadence by id error:", err)
+    return null
   }
 }
 

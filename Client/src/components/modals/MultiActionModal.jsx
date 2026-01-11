@@ -15,28 +15,48 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Play, MoreVertical, SkipForward, Clock, History } from "lucide-react";
 
-export default function MultiActionModal({ open, onOpenChange, person, actions }) {
+export default function MultiActionModal({ 
+  open, 
+  onOpenChange, 
+  person, 
+  actions,
+  onCompleteStep,
+  onSkipStep,
+  onPostponeStep
+}) {
   if (!person || !actions) return null;
 
   const handleExecuteAction = (actionId, e) => {
     e.stopPropagation();
-    console.log("Execute action:", actionId, "for person:", person.id);
-    // Placeholder - no implementation yet
+    if (onCompleteStep) {
+      onCompleteStep(person.id, actionId, e);
+    } else {
+      console.log("Execute action:", actionId, "for person:", person.id);
+    }
   };
 
   const handleSkip = (actionId, e) => {
     e.stopPropagation();
-    console.log("Skip action:", actionId);
+    if (onSkipStep) {
+      onSkipStep(person.id, actionId, e);
+    } else {
+      console.log("Skip action:", actionId);
+    }
   };
 
   const handlePostpone = (actionId, e) => {
     e.stopPropagation();
-    console.log("Postpone action:", actionId);
+    if (onPostponeStep) {
+      onPostponeStep(person.id, actionId, null, e);
+    } else {
+      console.log("Postpone action:", actionId);
+    }
   };
 
   const handleViewHistory = (actionId, e) => {
     e.stopPropagation();
     console.log("View history for action:", actionId);
+    // Placeholder - no implementation yet
   };
 
   return (

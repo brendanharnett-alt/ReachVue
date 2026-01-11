@@ -29,7 +29,7 @@ import MultiActionModal from "@/components/modals/MultiActionModal";
 import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
 import AddStepModal from "@/components/modals/AddStepModal";
 import AddContactToCadenceModal from "@/components/modals/AddContactToCadenceModal";
-import { fetchCadenceSteps, createCadenceStep, deleteCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts, removeContactFromCadence, skipCadenceStep } from "@/api";
+import { fetchCadenceSteps, createCadenceStep, deleteCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts, removeContactFromCadence, skipCadenceStep, completeCadenceStep, postponeCadenceStep, fetchCadenceById } from "@/api";
 
 // Generate mock data with dates relative to today
 const generateMockPeople = () => {
@@ -94,16 +94,7 @@ const generateMockPeople = () => {
   ];
 };
 
-// Get cadence name from ID (mock lookup)
-const getCadenceName = (id) => {
-  const cadences = {
-    1: "Q1 Enterprise Outreach",
-    2: "Follow-up Campaign",
-    3: "Product Demo Follow-up",
-    4: "New Customer Onboarding",
-  };
-  return cadences[id] || `Cadence ${id}`;
-};
+// Get cadence name from ID - will be fetched from backend
 
 // Generate cadence structure (14-day cadence)
 const generateCadenceStructure = (cadenceId) => {
@@ -224,7 +215,7 @@ export default function CadenceDetailPage() {
   const { cadenceId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const cadenceName = getCadenceName(parseInt(cadenceId));
+  const [cadenceName, setCadenceName] = useState("Loading...");
   const [peopleInCadence, setPeopleInCadence] = useState([]);
   const [loadingContacts, setLoadingContacts] = useState(true);
   const [multiActionModalOpen, setMultiActionModalOpen] = useState(false);
@@ -254,13 +245,24 @@ export default function CadenceDetailPage() {
     setActiveTab(tab);
   }, [location.search]);
 
-  // Fetch cadence steps from backend
+  // Fetch cadence name and steps from backend
   useEffect(() => {
-    const loadSteps = async () => {
+    const loadCadenceData = async () => {
       if (!cadenceId) return;
       setLoadingSteps(true);
       try {
-        const steps = await fetchCadenceSteps(cadenceId);
+        // Load cadence name and steps in parallel
+        const [cadence, steps] = await Promise.all([
+          fetchCadenceById(cadenceId),
+          fetchCadenceSteps(cadenceId),
+        ]);
+        
+        if (cadence) {
+          setCadenceName(cadence.name || `Cadence ${cadenceId}`);
+        } else {
+          setCadenceName(`Cadence ${cadenceId}`);
+        }
+        
         // Transform backend data to match UI structure (group by day_number)
         const groupedByDay = {};
         steps.forEach((step) => {
@@ -284,13 +286,14 @@ export default function CadenceDetailPage() {
         const structure = Object.values(groupedByDay).sort((a, b) => a.day - b.day);
         setCadenceStructure(structure);
       } catch (err) {
-        console.error("Failed to load cadence steps:", err);
+        console.error("Failed to load cadence data:", err);
+        setCadenceName(`Cadence ${cadenceId}`);
         setCadenceStructure([]);
       } finally {
         setLoadingSteps(false);
       }
     };
-    loadSteps();
+    loadCadenceData();
   }, [cadenceId]);
 
   // Fetch cadence contacts from backend
@@ -437,17 +440,11 @@ export default function CadenceDetailPage() {
     window.open("https://www.linkedin.com/in/arvindkrishna/", "_blank");
   };
 
-  const handleSkip = async (personId, e) => {
-    e.stopPropagation();
+  const handleSkip = async (personId, cadenceStepId = null, e = null) => {
+    if (e) e.stopPropagation();
     
     // personId should be the contact_cadence_id
-    console.log('[SKIP STEP FRONTEND] Skipping step for personId:', personId);
     const person = peopleInCadence.find(p => p.id === personId || p.contactId === personId);
-    console.log('[SKIP STEP FRONTEND] Found person:', { 
-      id: person?.id, 
-      contactId: person?.contactId, 
-      name: person ? `${person.firstName} ${person.lastName}` : 'NOT FOUND' 
-    });
     
     if (!person) {
       console.error('[SKIP STEP FRONTEND] Person not found for personId:', personId);
@@ -457,10 +454,24 @@ export default function CadenceDetailPage() {
     
     // Use the contact_cadence_id (person.id)
     const contactCadenceId = person.id;
-    console.log('[SKIP STEP FRONTEND] Using contact_cadence_id:', contactCadenceId);
+    
+    // If cadenceStepId not provided, find it from currentStepOrder
+    let stepId = cadenceStepId;
+    if (!stepId && person.currentStepOrder != null) {
+      const allSteps = cadenceStructure.flatMap((day) => day.actions);
+      const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+      if (currentStep) {
+        stepId = currentStep.id;
+      }
+    }
+    
+    if (!stepId) {
+      alert('Unable to determine which step to skip');
+      return;
+    }
     
     try {
-      await skipCadenceStep(contactCadenceId);
+      await skipCadenceStep(contactCadenceId, stepId);
       
       // Refresh the contacts list to show the updated step
       const [cadenceContacts, allContacts] = await Promise.all([
@@ -482,10 +493,108 @@ export default function CadenceDetailPage() {
     }
   };
 
-  const handlePostpone = (personId, e) => {
-    e.stopPropagation();
-    // Placeholder - no implementation yet
-    console.log("Postpone for person:", personId);
+  const handleCompleteStep = async (personId, cadenceStepId, e = null) => {
+    if (e) e.stopPropagation();
+    
+    const person = peopleInCadence.find(p => p.id === personId || p.contactId === personId);
+    
+    if (!person) {
+      alert('Contact not found');
+      return;
+    }
+    
+    const contactCadenceId = person.id;
+    
+    if (!cadenceStepId) {
+      alert('Step ID is required');
+      return;
+    }
+    
+    try {
+      await completeCadenceStep(contactCadenceId, cadenceStepId);
+      
+      // Refresh the contacts list
+      const [cadenceContacts, allContacts] = await Promise.all([
+        fetchCadenceContacts(cadenceId),
+        fetchContacts(),
+      ]);
+      
+      setPeopleInCadence(
+        transformCadencePeople({
+          cadenceContacts,
+          allContacts,
+          cadenceStructure,
+        })
+      );
+      
+      // Close modal if open
+      setMultiActionModalOpen(false);
+      
+    } catch (err) {
+      console.error("Failed to complete step:", err);
+      alert(`Failed to complete step: ${err.message || "Please try again."}`);
+    }
+  };
+
+  const handlePostpone = async (personId, cadenceStepId = null, postponeDays = 1, e = null) => {
+    if (e) e.stopPropagation();
+    
+    const person = peopleInCadence.find(p => p.id === personId || p.contactId === personId);
+    
+    if (!person) {
+      alert('Contact not found');
+      return;
+    }
+    
+    const contactCadenceId = person.id;
+    
+    // If cadenceStepId not provided, find it from currentStepOrder
+    let stepId = cadenceStepId;
+    if (!stepId && person.currentStepOrder != null) {
+      const allSteps = cadenceStructure.flatMap((day) => day.actions);
+      const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+      if (currentStep) {
+        stepId = currentStep.id;
+      }
+    }
+    
+    if (!stepId) {
+      alert('Unable to determine which step to postpone');
+      return;
+    }
+    
+    // Prompt for postpone days if not provided
+    if (!postponeDays || postponeDays <= 0) {
+      const daysInput = prompt('How many days to postpone?', '1');
+      if (!daysInput) return;
+      postponeDays = parseInt(daysInput, 10);
+      if (isNaN(postponeDays) || postponeDays <= 0) {
+        alert('Please enter a valid number of days');
+        return;
+      }
+    }
+    
+    try {
+      await postponeCadenceStep(contactCadenceId, stepId, postponeDays);
+      
+      // Refresh the contacts list
+      const [cadenceContacts, allContacts] = await Promise.all([
+        fetchCadenceContacts(cadenceId),
+        fetchContacts(),
+      ]);
+      
+      setPeopleInCadence(
+        transformCadencePeople({
+          cadenceContacts,
+          allContacts,
+          cadenceStructure,
+        })
+      );
+      
+    } catch (err) {
+      console.error("Failed to postpone step:", err);
+      alert(`Failed to postpone step: ${err.message || "Please try again."}`);
+    }
   };
 
   const handleHistoricalActions = (personId, e) => {
@@ -1050,7 +1159,7 @@ export default function CadenceDetailPage() {
                                 className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleSkip(person.id, e);
+                                  handleSkip(person.id, null, e);
                                 }}
                                 title="Skip Step"
                               >
@@ -1060,7 +1169,7 @@ export default function CadenceDetailPage() {
                                 className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handlePostpone(person.id, e);
+                                  handlePostpone(person.id, null, 1, e);
                                 }}
                                 title="Postpone"
                               >
@@ -1267,6 +1376,9 @@ export default function CadenceDetailPage() {
           onOpenChange={setMultiActionModalOpen}
           person={selectedPerson}
           actions={selectedPerson ? getMultiActions(selectedPerson) : []}
+          onCompleteStep={handleCompleteStep}
+          onSkipStep={handleSkip}
+          onPostponeStep={handlePostpone}
         />
       )}
 
@@ -1319,36 +1431,55 @@ function transformCadencePeople({
   return cadenceContacts.map((cc) => {
     const fullContact = contactMap.get(cc.contact_id) || {};
 
-    // 🔑 SOURCE OF TRUTH
-    let currentStepOrder = cc.current_step_order;
+    // Backend returns current_day, not current_step_order
+    // Find the first step in the current day to determine current_step_order
+    let currentStepOrder = null;
+    let dayNumber = cc.current_day ?? null;
 
-    // Only default if backend truly has no step yet
+    if (dayNumber != null) {
+      // Find the first step for this day (by step_order)
+      const dayData = cadenceStructure.find((d) => d.day === dayNumber);
+      if (dayData && dayData.actions.length > 0) {
+        const sortedDaySteps = [...dayData.actions].sort(
+          (a, b) => a.step_order - b.step_order
+        );
+        // Use the first step in the day as the current step
+        // (Backend doesn't tell us which specific step is pending, so we use the first)
+        currentStepOrder = sortedDaySteps[0]?.step_order ?? null;
+      }
+    }
+
+    // Fallback: if no current_day, use first step
     if (currentStepOrder == null && firstStep) {
       currentStepOrder = firstStep.step_order;
+      dayNumber = firstStep.day_number;
     }
 
     const step = stepByOrder.get(currentStepOrder) || null;
 
-    let dayNumber = step?.day_number ?? null;
-
-    // Multi-step logic
+    // Multi-step logic - use backend's is_multi_step if available
     const daySteps =
       dayNumber != null
         ? cadenceStructure.find((d) => d.day === dayNumber)?.actions || []
         : [];
 
-    const isMultiStep = daySteps.length > 1;
+    const isMultiStep = cc.is_multi_step ?? (daySteps.length > 1);
 
     let remainingSteps = null;
-    if (isMultiStep && step) {
-      const sortedDaySteps = [...daySteps].sort(
-        (a, b) => a.step_order - b.step_order
-      );
-      const idx = sortedDaySteps.findIndex(
-        (s) => s.step_order === currentStepOrder
-      );
-      if (idx !== -1) {
-        remainingSteps = sortedDaySteps.length - idx;
+    if (isMultiStep) {
+      // Use backend's pending_steps_in_day if available, otherwise calculate
+      if (cc.pending_steps_in_day != null) {
+        remainingSteps = cc.pending_steps_in_day;
+      } else if (step) {
+        const sortedDaySteps = [...daySteps].sort(
+          (a, b) => a.step_order - b.step_order
+        );
+        const idx = sortedDaySteps.findIndex(
+          (s) => s.step_order === currentStepOrder
+        );
+        if (idx !== -1) {
+          remainingSteps = sortedDaySteps.length - idx;
+        }
       }
     }
 

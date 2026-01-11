@@ -1053,42 +1053,74 @@ app.post('/cadences/:cadenceId/contacts', async (req, res) => {
     return res.status(400).send('contact_id is required');
   }
 
+  const client = await pool.connect();
+
   try {
-    // Find the first step by day_number (lowest), then step_order (lowest within that day)
-    const firstStepResult = await pool.query(
-      `
-      SELECT step_order
-      FROM cadence_steps
-      WHERE cadence_id = $1 AND is_active = true
-      ORDER BY day_number ASC, step_order ASC
-      LIMIT 1
-      `,
-      [cadenceId]
-    );
+    await client.query('BEGIN');
 
-    const firstStepOrder = firstStepResult.rowCount > 0 ? firstStepResult.rows[0].step_order : 0;
-
-    await pool.query(
+    // 1. Insert contact → cadence membership
+    const contactCadenceResult = await client.query(
       `
       INSERT INTO contact_cadences (
-  contact_id,
-  cadence_id,
-  current_step_order,
-  anchor_date
-)
-VALUES ($1, $2, $3, CURRENT_DATE)
-ON CONFLICT DO NOTHING
-
+        contact_id,
+        cadence_id,
+        anchor_date
+      )
+      VALUES ($1, $2, CURRENT_DATE)
+      ON CONFLICT DO NOTHING
+      RETURNING id
       `,
-      [contact_id, cadenceId, firstStepOrder]
+      [contact_id, cadenceId]
     );
 
-    res.status(201).json({ success: true, message: "Contact added to cadence" });
+    // Idempotent case: already in cadence
+    if (contactCadenceResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(200).json({
+        success: true,
+        message: 'Contact already in cadence',
+      });
+    }
+
+    const contactCadenceId = contactCadenceResult.rows[0].id;
+
+    // 2. Create step state rows
+    await client.query(
+      `
+      INSERT INTO cadence_step_states (
+        contact_cadence_id,
+        cadence_step_id,
+        status,
+        due_on
+      )
+      SELECT
+        $1,
+        cs.id,
+        'pending',
+        CURRENT_DATE + cs.day_number
+      FROM cadence_steps cs
+      WHERE cs.cadence_id = $2
+        AND cs.is_active = true
+      `,
+      [contactCadenceId, cadenceId]
+    );
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      success: true,
+      message: 'Contact added to cadence',
+    });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Error adding contact to cadence:', err);
     res.status(500).send('Failed to add contact to cadence');
+  } finally {
+    client.release();
   }
 });
+
+
 
 app.post('/cadences/:cadenceId/contacts/bulk', async (req, res) => {
   const { cadenceId } = req.params;
