@@ -6,8 +6,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Play, History, SkipForward, Clock } from "lucide-react";
+import { Play, History, SkipForward, Clock, Mail, Phone, Linkedin } from "lucide-react";
 import { fetchContactCadenceSteps } from "@/api";
+
+// Get action icon based on type (same as cadence structure page)
+function getActionIcon(type) {
+  switch (type?.toLowerCase()) {
+    case "email":
+      return <Mail className="h-4 w-4 text-gray-500" />;
+    case "phone":
+    case "call":
+      return <Phone className="h-4 w-4 text-gray-500" />;
+    case "linkedin":
+      return <Linkedin className="h-4 w-4 text-gray-500" />;
+    default:
+      return <Clock className="h-4 w-4 text-gray-500" />;
+  }
+}
 
 // Check if date is past due
 function isPastDue(dateString) {
@@ -208,7 +223,10 @@ export default function MultiActionModal({
                           className="border-b hover:bg-gray-50 transition group"
                         >
                           <td className="px-4 py-3 text-gray-700">
-                            {step.step_label}
+                            <div className="flex items-center gap-2">
+                              {getActionIcon(step.action_type)}
+                              <span>{step.step_label}</span>
+                            </div>
                           </td>
                           <td className="px-4 py-3">
                             {step.status === 'skipped' && step.skipped_at

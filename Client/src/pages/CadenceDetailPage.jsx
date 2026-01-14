@@ -382,55 +382,92 @@ export default function CadenceDetailPage() {
     setMultiActionModalOpen(true);
   };
 
-  const handleExecuteAction = (person, e) => {
+  const handleExecuteAction = async (person, e) => {
     e.stopPropagation();
-    // Open modal for any step - it will show all steps for that day
-    // First, we need to determine the day number from the current step
-    if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && cadenceStructure.length > 0) {
-      const allSteps = cadenceStructure.flatMap((day) => day.actions);
-      const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
-      if (currentStep) {
-        // Create a person object with the correct dayNumber for the modal
-        const personWithDay = {
-          ...person,
-          dayNumber: currentStep.day_number
-        };
-        handleOpenMultiActionModal(personWithDay);
-      } else {
-        // Fallback: use person's dayNumber if available
-        if (person.dayNumber !== null && person.dayNumber !== undefined) {
-          handleOpenMultiActionModal(person);
+    
+    // Check if this is a multi-action step
+    const isMultiStep = person.stepInfo?.isMultiStep === true;
+    
+    if (isMultiStep) {
+      // Multi-action: open modal to show all steps for the day
+      if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && cadenceStructure.length > 0) {
+        const allSteps = cadenceStructure.flatMap((day) => day.actions);
+        const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+        if (currentStep) {
+          // Create a person object with the correct dayNumber for the modal
+          const personWithDay = {
+            ...person,
+            dayNumber: currentStep.day_number
+          };
+          handleOpenMultiActionModal(personWithDay);
+        } else {
+          // Fallback: use person's dayNumber if available
+          if (person.dayNumber !== null && person.dayNumber !== undefined) {
+            handleOpenMultiActionModal(person);
+          }
         }
+      } else if (person.dayNumber !== null && person.dayNumber !== undefined) {
+        handleOpenMultiActionModal(person);
       }
-    } else if (person.dayNumber !== null && person.dayNumber !== undefined) {
-      handleOpenMultiActionModal(person);
     } else {
-      // Placeholder - no implementation yet
-      console.log("Execute action for person:", person.id);
+      // Single step: directly complete the step
+      if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && cadenceStructure.length > 0) {
+        const allSteps = cadenceStructure.flatMap((day) => day.actions);
+        const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+        if (currentStep && currentStep.id) {
+          // Complete the step directly
+          await handleCompleteStep(person.id, currentStep.id, e);
+        } else {
+          alert('Unable to determine which step to complete');
+        }
+      } else {
+        alert('Unable to determine which step to complete');
+      }
     }
   };
 
-  const handleStepTextClick = (person) => {
-    // Open modal for any step - it will show all steps for that day
-    // First, we need to determine the day number from the current step
-    if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && cadenceStructure.length > 0) {
-      const allSteps = cadenceStructure.flatMap((day) => day.actions);
-      const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
-      if (currentStep) {
-        // Create a person object with the correct dayNumber for the modal
-        const personWithDay = {
-          ...person,
-          dayNumber: currentStep.day_number
-        };
-        handleOpenMultiActionModal(personWithDay);
-      } else {
-        // Fallback: use person's dayNumber if available
-        if (person.dayNumber !== null && person.dayNumber !== undefined) {
-          handleOpenMultiActionModal(person);
+  const handleStepTextClick = async (person, e) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    // Check if this is a multi-action step
+    const isMultiStep = person.stepInfo?.isMultiStep === true;
+    
+    if (isMultiStep) {
+      // Multi-action: open modal to show all steps for the day
+      if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && cadenceStructure.length > 0) {
+        const allSteps = cadenceStructure.flatMap((day) => day.actions);
+        const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+        if (currentStep) {
+          // Create a person object with the correct dayNumber for the modal
+          const personWithDay = {
+            ...person,
+            dayNumber: currentStep.day_number
+          };
+          handleOpenMultiActionModal(personWithDay);
+        } else {
+          // Fallback: use person's dayNumber if available
+          if (person.dayNumber !== null && person.dayNumber !== undefined) {
+            handleOpenMultiActionModal(person);
+          }
         }
+      } else if (person.dayNumber !== null && person.dayNumber !== undefined) {
+        handleOpenMultiActionModal(person);
       }
-    } else if (person.dayNumber !== null && person.dayNumber !== undefined) {
-      handleOpenMultiActionModal(person);
+    } else {
+      // Single step: directly complete the step
+      if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && cadenceStructure.length > 0) {
+        const allSteps = cadenceStructure.flatMap((day) => day.actions);
+        const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+        if (currentStep && currentStep.id) {
+          // Complete the step directly
+          await handleCompleteStep(person.id, currentStep.id, e);
+        } else {
+          alert('Unable to determine which step to complete');
+        }
+      } else {
+        alert('Unable to determine which step to complete');
+      }
     }
   };
 
@@ -1101,7 +1138,7 @@ export default function CadenceDetailPage() {
                           ) : null}
                           <span
                             className="text-gray-700 cursor-pointer hover:text-gray-900"
-                            onClick={() => handleStepTextClick(person)}
+                            onClick={(e) => handleStepTextClick(person, e)}
                           >
                             {person.currentStep}
                           </span>
@@ -1156,12 +1193,19 @@ export default function CadenceDetailPage() {
                                 <History className="h-4 w-4" />
                               </button>
                               <button
-                                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                className={`p-1.5 rounded transition-colors ${
+                                  person.stepInfo?.isMultiStep
+                                    ? "text-gray-300 cursor-not-allowed"
+                                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                                }`}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleSkip(person.id, null, e);
+                                  if (!person.stepInfo?.isMultiStep) {
+                                    handleSkip(person.id, null, e);
+                                  }
                                 }}
-                                title="Skip Step"
+                                disabled={person.stepInfo?.isMultiStep === true}
+                                title={person.stepInfo?.isMultiStep ? "Multi-action step, open play menu" : "Skip Step"}
                               >
                                 <SkipForward className="h-4 w-4" />
                               </button>
