@@ -1696,14 +1696,18 @@ app.get('/contact-cadences/:id/steps', async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT
-        css.cadence_step_id,
-        cs.step_label,
-        cs.action_type,
-        cs.action_value,
-        cs.day_number,
-        css.status,
-        css.due_on
+  SELECT
+  css.cadence_step_id,
+  cs.step_label,
+  cs.action_type,
+  cs.action_value,
+  cs.day_number,
+  css.status,
+  css.due_on,
+  css.skipped_at,
+  css.completed_at
+
+
       FROM cadence_step_states css
       JOIN cadence_steps cs
         ON cs.id = css.cadence_step_id

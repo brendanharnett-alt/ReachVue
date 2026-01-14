@@ -62,6 +62,37 @@ function formatDateWithOrdinal(dateString) {
   return `${monthName} ${dayNum}${getOrdinal(dayNum)}, ${yearNum}`;
 }
 
+// Format skipped date/time as "Mon XX, XXXX HH:MM AM/PM" (e.g., "Jan 14, 2026 2:30 PM")
+function formatSkippedDateTime(dateString) {
+  if (!dateString) return "—";
+
+  let date;
+  if (dateString instanceof Date) {
+    date = dateString;
+  } else if (typeof dateString === 'string') {
+    // Parse ISO timestamp
+    date = new Date(dateString);
+  } else {
+    return "—";
+  }
+
+  if (isNaN(date.getTime())) return "—";
+
+  // Get month abbreviation (first 3 letters)
+  const monthAbbr = date.toLocaleString("en-US", { month: "short" });
+  const day = date.getDate();
+  const year = date.getFullYear();
+  
+  // Format time in 12-hour format with AM/PM
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+  const displayMinutes = minutes.toString().padStart(2, '0');
+  
+  return `${monthAbbr} ${day}, ${year} ${displayHours}:${displayMinutes} ${ampm}`;
+}
+
 export default function MultiActionModal({ 
   open, 
   onOpenChange, 
@@ -73,20 +104,55 @@ export default function MultiActionModal({
 }) {
   const [steps, setSteps] = useState([]);
   const [loadingSteps, setLoadingSteps] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Wrapper for onSkipStep that refreshes modal data after skip
+  const handleSkipWithRefresh = async (personId, cadenceStepId, e) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MultiActionModal.jsx:110',message:'handleSkipWithRefresh called',data:{personId,cadenceStepId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    if (onSkipStep) {
+      try {
+        await onSkipStep(personId, cadenceStepId, e);
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MultiActionModal.jsx:115',message:'Skip completed, triggering refresh',data:{personId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        // Trigger refresh by incrementing refreshKey
+        setRefreshKey(prev => prev + 1);
+      } catch (err) {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MultiActionModal.jsx:120',message:'Skip failed',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        console.error('Skip failed:', err);
+      }
+    }
+  };
 
   useEffect(() => {
     if (open && person?.id) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MultiActionModal.jsx:108',message:'useEffect triggered - fetching steps',data:{open,personId:person?.id,personDayNumber:person?.dayNumber},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       setLoadingSteps(true);
       fetchContactCadenceSteps(person.id)
         .then((stepsData) => {
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MultiActionModal.jsx:113',message:'Steps fetched from API',data:{stepCount:stepsData?.length,steps:stepsData?.map(s=>({id:s.cadence_step_id,label:s.step_label,status:s.status,skipped_at:s.skipped_at,due_on:s.due_on}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           // Filter steps to only show current day
           const currentDay = person?.dayNumber;
           const filteredSteps = currentDay != null 
             ? stepsData.filter(step => step.day_number === currentDay)
             : stepsData;
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MultiActionModal.jsx:120',message:'Setting filtered steps to state',data:{filteredCount:filteredSteps?.length,filteredSteps:filteredSteps?.map(s=>({id:s.cadence_step_id,status:s.status,skipped_at:s.skipped_at}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           setSteps(filteredSteps);
         })
         .catch((err) => {
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MultiActionModal.jsx:125',message:'Error fetching steps',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
           console.error("Failed to fetch contact cadence steps:", err);
           setSteps([]);
         })
@@ -94,7 +160,7 @@ export default function MultiActionModal({
     } else {
       setSteps([]);
     }
-  }, [open, person?.id]);
+  }, [open, person?.id, refreshKey]);
 
   if (!person) return null;
 
@@ -133,6 +199,9 @@ export default function MultiActionModal({
                   ) : (
                     steps.map((step) => {
                       const pastDue = isPastDue(step.due_on);
+                      // #region agent log
+                      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MultiActionModal.jsx:150',message:'Rendering step row',data:{stepId:step.cadence_step_id,stepLabel:step.step_label,status:step.status,skipped_at:step.skipped_at,due_on:step.due_on,isSkipped:step.status==='skipped'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                      // #endregion
                       return (
                         <tr
                           key={step.cadence_step_id}
@@ -142,7 +211,9 @@ export default function MultiActionModal({
                             {step.step_label}
                           </td>
                           <td className="px-4 py-3">
-                            {formatDateWithOrdinal(step.due_on)}
+                            {step.status === 'skipped' && step.skipped_at
+                              ? `Skipped on: ${formatSkippedDateTime(step.skipped_at)}`
+                              : formatDateWithOrdinal(step.due_on)}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
@@ -185,9 +256,7 @@ export default function MultiActionModal({
                                   className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (onSkipStep) {
-                                      onSkipStep(person.id, step.cadence_step_id, e);
-                                    }
+                                    handleSkipWithRefresh(person.id, step.cadence_step_id, e);
                                   }}
                                   title="Skip Step"
                                 >
