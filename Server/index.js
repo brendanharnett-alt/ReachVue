@@ -1061,18 +1061,15 @@ app.post('/cadences/:cadenceId/contacts', async (req, res) => {
     // 1. Insert contact → cadence membership
     const contactCadenceResult = await client.query(
       `
-      INSERT INTO contact_cadences (
-        contact_id,
-        cadence_id,
-        anchor_date,
-        started_at,
-        updated_at
-      )
-      VALUES ($1, $2, CURRENT_DATE, NOW(), NOW())
-      ON CONFLICT (contact_id, cadence_id)
-        WHERE ended_at IS NULL
-      DO NOTHING
-      RETURNING id
+  INSERT INTO contact_cadences (
+    contact_id,
+    cadence_id,
+    anchor_date,
+    started_at,
+    updated_at
+  )
+  VALUES ($1, $2, CURRENT_DATE, NOW(), NOW())
+  RETURNING id
       `,
       [contact_id, cadenceId]
     );
@@ -1318,6 +1315,43 @@ app.put('/contact-cadences/:id/skip-step', async (req, res) => {
       );
     }
 
+        // 6. If NO pending steps remain at all, end the cadence run
+        const anyPendingLeft = await client.query(
+          `
+          SELECT 1
+          FROM cadence_step_states
+          WHERE contact_cadence_id = $1
+            AND status = 'pending'
+          LIMIT 1
+          `,
+          [contactCadenceId]
+        );
+    
+        const cadenceIsFinished = anyPendingLeft.rowCount === 0;
+    
+        if (cadenceIsFinished) {
+          await client.query(
+            `
+            UPDATE contact_cadences
+            SET ended_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1
+              AND ended_at IS NULL
+            `,
+            [contactCadenceId]
+          );
+    
+          await client.query(
+            `
+            INSERT INTO contact_cadence_history
+            (contact_cadence_id, event_type, event_at)
+            VALUES ($1, 'ended', NOW())
+            `,
+            [contactCadenceId]
+          );
+        }
+    
+
     await client.query('COMMIT');
 
     res.json({
@@ -1489,7 +1523,7 @@ app.put('/contact-cadences/:id/complete-step', async (req, res) => {
     await client.query(
       `
       INSERT INTO contact_cadence_history
-      (contact_cadence_id, cadence_step_id, event_type, created_at)
+      (contact_cadence_id, cadence_step_id, event_type, event_at)
       VALUES ($1, $2, 'completed', NOW())
       `,
       [contactCadenceId, cadence_step_id]
@@ -1540,6 +1574,43 @@ app.put('/contact-cadences/:id/complete-step', async (req, res) => {
         [contactCadenceId, completedDay]
       );
     }
+
+        // 6. If NO pending steps remain at all, end the cadence run
+        const anyPendingLeft = await client.query(
+          `
+          SELECT 1
+          FROM cadence_step_states
+          WHERE contact_cadence_id = $1
+            AND status = 'pending'
+          LIMIT 1
+          `,
+          [contactCadenceId]
+        );
+    
+        const cadenceIsFinished = anyPendingLeft.rowCount === 0;
+    
+        if (cadenceIsFinished) {
+          await client.query(
+            `
+            UPDATE contact_cadences
+            SET ended_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1
+              AND ended_at IS NULL
+            `,
+            [contactCadenceId]
+          );
+    
+          await client.query(
+            `
+            INSERT INTO contact_cadence_history
+            (contact_cadence_id, event_type, event_at)
+            VALUES ($1, 'ended', NOW())
+            `,
+            [contactCadenceId]
+          );
+        }
+    
 
     await client.query('COMMIT');
 
