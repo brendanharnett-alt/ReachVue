@@ -1689,3 +1689,35 @@ app.put('/contact-cadences/:id/postpone-step', async (req, res) => {
   }
 });
 
+// Get step-level actions for a single contact cadence (modal view)
+app.get('/contact-cadences/:id/steps', async (req, res) => {
+  const contactCadenceId = req.params.id;
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        css.cadence_step_id,
+        cs.step_label,
+        cs.action_type,
+        cs.action_value,
+        cs.day_number,
+        css.status,
+        css.due_on
+      FROM cadence_step_states css
+      JOIN cadence_steps cs
+        ON cs.id = css.cadence_step_id
+      WHERE css.contact_cadence_id = $1
+      ORDER BY cs.day_number ASC, cs.step_order ASC
+      `,
+      [contactCadenceId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching contact cadence steps:', err);
+    res.status(500).send('Failed to fetch cadence steps');
+  }
+});
+
+

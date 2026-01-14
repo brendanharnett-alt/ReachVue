@@ -365,6 +365,17 @@ export async function fetchCadenceById(cadenceId) {
   }
 }
 
+export async function fetchContactCadenceSteps(contactCadenceId) {
+  try {
+    const res = await fetch(`${BASE_URL}/contact-cadences/${contactCadenceId}/steps`)
+    if (!res.ok) throw new Error("Failed to fetch contact cadence steps")
+    return await res.json()
+  } catch (err) {
+    console.error("Fetch contact cadence steps error:", err)
+    throw err
+  }
+}
+
 export async function deleteCadence(cadenceId) {
   try {
     // #region agent log

@@ -1,63 +1,83 @@
 // src/components/modals/MultiActionModal.jsx
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Play, MoreVertical, SkipForward, Clock, History } from "lucide-react";
+import { fetchContactCadenceSteps } from "@/api";
+
+// Format date as "June 15th, 2025"
+function formatDateWithOrdinal(dateString) {
+  if (!dateString) return "—";
+
+  // Handle Date objects
+  let date;
+  if (dateString instanceof Date) {
+    date = dateString;
+  } else if (typeof dateString === 'string') {
+    // Handle ISO timestamp format (e.g., "2026-01-14T05:00:00.000Z") by extracting date part
+    const dateOnly = dateString.split('T')[0]; // Extract YYYY-MM-DD from ISO string
+    // Parse yyyy-mm-dd as LOCAL date
+    const [year, month, day] = dateOnly.split("-").map(Number);
+    date = new Date(year, month - 1, day);
+  } else {
+    return "—";
+  }
+
+  const dayNum = date.getDate();
+  const monthName = date.toLocaleString("en-US", { month: "long" });
+  const yearNum = date.getFullYear();
+
+  const getOrdinal = (n) => {
+    if (n > 3 && n < 21) return "th";
+    switch (n % 10) {
+      case 1:
+        return "st";
+      case 2:
+        return "nd";
+      case 3:
+        return "rd";
+      default:
+        return "th";
+    }
+  };
+
+  return `${monthName} ${dayNum}${getOrdinal(dayNum)}, ${yearNum}`;
+}
 
 export default function MultiActionModal({ 
   open, 
   onOpenChange, 
-  person, 
-  actions,
-  onCompleteStep,
-  onSkipStep,
-  onPostponeStep
+  person
 }) {
-  if (!person || !actions) return null;
+  const [steps, setSteps] = useState([]);
+  const [loadingSteps, setLoadingSteps] = useState(false);
 
-  const handleExecuteAction = (actionId, e) => {
-    e.stopPropagation();
-    if (onCompleteStep) {
-      onCompleteStep(person.id, actionId, e);
+  useEffect(() => {
+    if (open && person?.id) {
+      setLoadingSteps(true);
+      fetchContactCadenceSteps(person.id)
+        .then((stepsData) => {
+          // Filter steps to only show current day
+          const currentDay = person?.dayNumber;
+          const filteredSteps = currentDay != null 
+            ? stepsData.filter(step => step.day_number === currentDay)
+            : stepsData;
+          setSteps(filteredSteps);
+        })
+        .catch((err) => {
+          console.error("Failed to fetch contact cadence steps:", err);
+          setSteps([]);
+        })
+        .finally(() => setLoadingSteps(false));
     } else {
-      console.log("Execute action:", actionId, "for person:", person.id);
+      setSteps([]);
     }
-  };
+  }, [open, person?.id]);
 
-  const handleSkip = (actionId, e) => {
-    e.stopPropagation();
-    if (onSkipStep) {
-      onSkipStep(person.id, actionId, e);
-    } else {
-      console.log("Skip action:", actionId);
-    }
-  };
-
-  const handlePostpone = (actionId, e) => {
-    e.stopPropagation();
-    if (onPostponeStep) {
-      onPostponeStep(person.id, actionId, null, e);
-    } else {
-      console.log("Postpone action:", actionId);
-    }
-  };
-
-  const handleViewHistory = (actionId, e) => {
-    e.stopPropagation();
-    console.log("View history for action:", actionId);
-    // Placeholder - no implementation yet
-  };
+  if (!person) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -74,91 +94,37 @@ export default function MultiActionModal({
                 <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
                   <tr>
                     <th className="px-4 py-3 text-left font-medium">Action</th>
-                    <th className="px-4 py-3 text-left font-medium">Execute</th>
-                    <th className="px-4 py-3 text-left font-medium">Actions</th>
+                    <th className="px-4 py-3 text-left font-medium">Due Date</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {actions.map((action) => {
-                    const isPastDue = action.dueOn
-                      ? new Date(action.dueOn) < new Date()
-                      : false;
-                    return (
+                  {loadingSteps ? (
+                    <tr>
+                      <td colSpan={2} className="px-4 py-8 text-center text-gray-500">
+                        Loading...
+                      </td>
+                    </tr>
+                  ) : steps.length === 0 ? (
+                    <tr>
+                      <td colSpan={2} className="px-4 py-8 text-center text-gray-500">
+                        No steps found
+                      </td>
+                    </tr>
+                  ) : (
+                    steps.map((step) => (
                       <tr
-                        key={action.id}
+                        key={step.cadence_step_id}
                         className="border-b hover:bg-gray-50 transition group"
                       >
                         <td className="px-4 py-3 text-gray-700">
-                          {action.name}
+                          {step.step_label}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center">
-                            <div className="w-6 flex items-center justify-start flex-shrink-0">
-                              <button
-                                className={`h-6 w-6 rounded-full flex items-center justify-center transition-all ${
-                                  isPastDue
-                                    ? "bg-gray-200 hover:bg-gray-300"
-                                    : "border border-gray-300 bg-transparent hover:border-gray-400"
-                                }`}
-                                onClick={(e) => handleExecuteAction(action.id, e)}
-                              >
-                                <Play
-                                  className={`h-3 w-3 ${
-                                    isPastDue
-                                      ? "text-blue-700 fill-blue-700"
-                                      : "text-gray-900"
-                                  }`}
-                                />
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-gray-600 hover:text-gray-900"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-40">
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleViewHistory(action.id, e);
-                                }}
-                              >
-                                <History className="mr-2 h-4 w-4" />
-                                View History
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSkip(action.id, e);
-                                }}
-                              >
-                                <SkipForward className="mr-2 h-4 w-4" />
-                                Skip Action
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handlePostpone(action.id, e);
-                                }}
-                              >
-                                <Clock className="mr-2 h-4 w-4" />
-                                Postpone
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          {formatDateWithOrdinal(step.due_on)}
                         </td>
                       </tr>
-                    );
-                  })}
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
