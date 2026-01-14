@@ -1375,6 +1375,10 @@ export default function CadenceDetailPage() {
           open={multiActionModalOpen}
           onOpenChange={setMultiActionModalOpen}
           person={selectedPerson}
+          onCompleteStep={handleCompleteStep}
+          onSkipStep={handleSkip}
+          onPostponeStep={handlePostpone}
+          onViewHistory={handleHistoricalActions}
         />
       )}
 
