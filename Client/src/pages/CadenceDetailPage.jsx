@@ -1,4 +1,6 @@
 // src/pages/CadenceDetailPage.jsx
+
+import PostponePopover from "@/components/cadence/PostponePopover"
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -1209,16 +1211,12 @@ export default function CadenceDetailPage() {
                               >
                                 <SkipForward className="h-4 w-4" />
                               </button>
-                              <button
-                                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handlePostpone(person.id, null, 1, e);
+                              <PostponePopover
+                                onConfirm={(date) => {
+                                  console.log("Postpone to:", date, "for contact_cadence_id:", person.id)
                                 }}
-                                title="Postpone"
-                              >
-                                <Clock className="h-4 w-4" />
-                              </button>
+                              />
+
                             </div>
                           </div>
                         </td>

@@ -334,26 +334,27 @@ export async function completeCadenceStep(contactCadenceId, cadenceStepId) {
   }
 }
 
-export async function postponeCadenceStep(contactCadenceId, cadenceStepId, postponeDays) {
-  try {
-    const res = await fetch(`${BASE_URL}/contact-cadences/${contactCadenceId}/postpone-step`, {
+export async function postponeCadenceStep(contactCadenceId, cadenceStepId, newDueOn) {
+  const res = await fetch(
+    `${BASE_URL}/contact-cadences/${contactCadenceId}/postpone-step`,
+    {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         cadence_step_id: cadenceStepId,
-        postpone_days: postponeDays 
+        new_due_on: newDueOn,
       }),
-    })
-    if (!res.ok) {
-      const errorText = await res.text()
-      throw new Error(errorText || "Failed to postpone step")
     }
-    return await res.json()
-  } catch (err) {
-    console.error("Postpone cadence step error:", err)
-    throw err
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to postpone step");
   }
+
+  return res.json();
 }
+
 
 export async function fetchCadenceById(cadenceId) {
   try {

@@ -1630,32 +1630,43 @@ app.put('/contact-cadences/:id/complete-step', async (req, res) => {
 
 app.put('/contact-cadences/:id/postpone-step', async (req, res) => {
   const contactCadenceId = req.params.id;
-  const { cadence_step_id, postpone_days } = req.body;
+  const { cadence_step_id, new_due_on } = req.body;
 
-  if (!cadence_step_id || !postpone_days || postpone_days <= 0) {
+  if (!cadence_step_id || !new_due_on) {
     return res
       .status(400)
-      .send('cadence_step_id and positive postpone_days are required');
+      .send('cadence_step_id and new_due_on are required');
   }
+
+  const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+const newDueDate = new Date(new_due_on);
+newDueDate.setHours(0, 0, 0, 0);
+
+if (newDueDate <= today) {
+  return res.status(400).send('new_due_on must be a future date');
+}
+
 
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    // 1. Update due_on for the pending step
+    // Update due_on for the pending step
     const updateResult = await client.query(
       `
       UPDATE cadence_step_states
       SET
-        due_on = due_on + ($3 || ' days')::interval,
+        due_on = $3::date,
         updated_at = NOW()
       WHERE contact_cadence_id = $1
         AND cadence_step_id = $2
         AND status = 'pending'
       RETURNING *
       `,
-      [contactCadenceId, cadence_step_id, postpone_days]
+      [contactCadenceId, cadence_step_id, new_due_on]
     );
 
     if (updateResult.rowCount === 0) {
@@ -1663,23 +1674,22 @@ app.put('/contact-cadences/:id/postpone-step', async (req, res) => {
       return res.status(404).send('Pending step not found');
     }
 
-    // 2. Log history
+    // Log history
     await client.query(
       `
       INSERT INTO contact_cadence_history
       (contact_cadence_id, cadence_step_id, event_type, metadata, event_at)
-      VALUES ($1, $2, 'postponed', jsonb_build_object('postpone_days', $3), NOW())
+      VALUES ($1, $2, 'postponed', jsonb_build_object('new_due_on', $3), NOW())
       `,
-      [contactCadenceId, cadence_step_id, postpone_days]
+      [contactCadenceId, cadence_step_id, new_due_on]
     );
 
     await client.query('COMMIT');
 
     res.json({
       success: true,
-      postponed_by_days: postpone_days
+      step: updateResult.rows[0],
     });
-
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Postpone step error:', err);
