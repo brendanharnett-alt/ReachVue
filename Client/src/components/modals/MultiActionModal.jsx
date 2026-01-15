@@ -126,14 +126,8 @@ export default function MultiActionModal({
   if (!person) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-4xl max-h-[80vh] overflow-y-auto"
-        onPointerDownOutside={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-      >
+    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {person.firstName} {person.lastName} — {person.currentStep}
