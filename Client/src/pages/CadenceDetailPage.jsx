@@ -456,21 +456,8 @@ export default function CadenceDetailPage() {
       } else if (person.dayNumber !== null && person.dayNumber !== undefined) {
         handleOpenMultiActionModal(person);
       }
-    } else {
-      // Single step: directly complete the step
-      if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && cadenceStructure.length > 0) {
-        const allSteps = cadenceStructure.flatMap((day) => day.actions);
-        const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
-        if (currentStep && currentStep.id) {
-          // Complete the step directly
-          await handleCompleteStep(person.id, currentStep.id, e);
-        } else {
-          alert('Unable to determine which step to complete');
-        }
-      } else {
-        alert('Unable to determine which step to complete');
-      }
     }
+    // Single step: do nothing when clicking step name
   };
 
   const handleLinkedInClick = (e) => {
@@ -1139,7 +1126,11 @@ export default function CadenceDetailPage() {
                             })()
                           ) : null}
                           <span
-                            className="text-gray-700 cursor-pointer hover:text-gray-900"
+                            className={`text-gray-700 ${
+                              person.stepInfo?.isMultiStep 
+                                ? "cursor-pointer hover:text-gray-900" 
+                                : ""
+                            }`}
                             onClick={(e) => handleStepTextClick(person, e)}
                           >
                             {person.currentStep}
