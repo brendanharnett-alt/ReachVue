@@ -1195,19 +1195,39 @@ export default function CadenceDetailPage() {
                                 <History className="h-4 w-4" />
                               </button>
                               <button
-                                className={`p-1.5 rounded transition-colors ${
-                                  person.stepInfo?.isMultiStep
-                                    ? "text-gray-300 cursor-not-allowed"
-                                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                                }`}
+                                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (!person.stepInfo?.isMultiStep) {
+                                  // Check if this is a multi-action step
+                                  const isMultiStep = person.stepInfo?.isMultiStep === true;
+                                  
+                                  if (isMultiStep) {
+                                    // Multi-action: open modal to show all steps for the day
+                                    if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && cadenceStructure.length > 0) {
+                                      const allSteps = cadenceStructure.flatMap((day) => day.actions);
+                                      const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+                                      if (currentStep) {
+                                        // Create a person object with the correct dayNumber for the modal
+                                        const personWithDay = {
+                                          ...person,
+                                          dayNumber: currentStep.day_number
+                                        };
+                                        handleOpenMultiActionModal(personWithDay);
+                                      } else {
+                                        // Fallback: use person's dayNumber if available
+                                        if (person.dayNumber !== null && person.dayNumber !== undefined) {
+                                          handleOpenMultiActionModal(person);
+                                        }
+                                      }
+                                    } else if (person.dayNumber !== null && person.dayNumber !== undefined) {
+                                      handleOpenMultiActionModal(person);
+                                    }
+                                  } else {
+                                    // Single step: skip directly
                                     handleSkip(person.id, null, e);
                                   }
                                 }}
-                                disabled={person.stepInfo?.isMultiStep === true}
-                                title={person.stepInfo?.isMultiStep ? "Multi-action step, open play menu" : "Skip Step"}
+                                title="Skip Step"
                               >
                                 <SkipForward className="h-4 w-4" />
                               </button>
