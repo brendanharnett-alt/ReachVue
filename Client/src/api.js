@@ -335,6 +335,9 @@ export async function completeCadenceStep(contactCadenceId, cadenceStepId) {
 }
 
 export async function postponeCadenceStep(contactCadenceId, cadenceStepId, newDueOn) {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.js:337',message:'postponeCadenceStep API function called',data:{contactCadenceId:contactCadenceId,cadenceStepId:cadenceStepId,newDueOn:newDueOn},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
   const res = await fetch(
     `${BASE_URL}/contact-cadences/${contactCadenceId}/postpone-step`,
     {
@@ -346,13 +349,23 @@ export async function postponeCadenceStep(contactCadenceId, cadenceStepId, newDu
       }),
     }
   );
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.js:349',message:'postponeCadenceStep fetch response received',data:{ok:res.ok,status:res.status,statusText:res.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
 
   if (!res.ok) {
     const text = await res.text();
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.js:352',message:'postponeCadenceStep error response',data:{status:res.status,errorText:text},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     throw new Error(text || "Failed to postpone step");
   }
 
-  return res.json();
+  const result = await res.json();
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.js:356',message:'postponeCadenceStep success response',data:{result:result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
+  return result;
 }
 
 

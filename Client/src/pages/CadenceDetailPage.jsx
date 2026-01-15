@@ -1212,10 +1212,46 @@ export default function CadenceDetailPage() {
                                 <SkipForward className="h-4 w-4" />
                               </button>
                               <PostponePopover
-                                onConfirm={(date) => {
-                                  console.log("Postpone to:", date, "for contact_cadence_id:", person.id)
-                                }}
-                              />
+  onConfirm={async (date) => {
+    try {
+      // 1. Find the current step being postponed
+      const allSteps = cadenceStructure.flatMap((d) => d.actions)
+      const step = allSteps.find(
+        (s) => s.step_order === person.currentStepOrder
+      )
+
+      if (!step) {
+        alert("Unable to determine step to postpone")
+        return
+      }
+
+      // 2. Call backend
+      await postponeCadenceStep(
+        person.id,     // contact_cadence_id
+        step.id,       // cadence_step_id
+        date           // new_due_on (YYYY-MM-DD)
+      )
+
+      // 3. Refresh people list
+      const [cadenceContacts, allContacts] = await Promise.all([
+        fetchCadenceContacts(cadenceId),
+        fetchContacts(),
+      ])
+
+      setPeopleInCadence(
+        transformCadencePeople({
+          cadenceContacts,
+          allContacts,
+          cadenceStructure,
+        })
+      )
+    } catch (err) {
+      console.error(err)
+      alert(err.message || "Failed to postpone step")
+    }
+  }}
+/>
+
 
                             </div>
                           </div>

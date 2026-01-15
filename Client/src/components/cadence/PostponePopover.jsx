@@ -49,7 +49,13 @@ export default function PostponePopover({ onConfirm }) {
             size="sm"
             disabled={!date}
             onClick={async () => {
+              // #region agent log
+              fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PostponePopover.jsx:51',message:'onConfirm button clicked',data:{date:date,hasOnConfirm:!!onConfirm},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+              // #endregion
               await onConfirm(date)
+              // #region agent log
+              fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PostponePopover.jsx:55',message:'onConfirm call completed',data:{date:date},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+              // #endregion
               setDate("")
               setOpen(false)
             }}

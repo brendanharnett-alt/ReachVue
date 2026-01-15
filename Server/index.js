@@ -1629,10 +1629,28 @@ app.put('/contact-cadences/:id/complete-step', async (req, res) => {
 });
 
 app.put('/contact-cadences/:id/postpone-step', async (req, res) => {
+  console.log("POSTPONE STEP HIT", {
+    params: req.params,
+    body: req.body,
+  });
+  
+  
+  
+  
+  // #region agent log
+  const fs = require('fs');
+  const logEntry = JSON.stringify({location:'index.js:1631',message:'Backend endpoint /contact-cadences/:id/postpone-step received request',data:{contactCadenceId:req.params.id,body:req.body,method:req.method},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})+'\n';
+  fs.appendFileSync('c:\\ReachVue\\.cursor\\debug.log', logEntry);
+  // #endregion
   const contactCadenceId = req.params.id;
   const { cadence_step_id, new_due_on } = req.body;
 
   if (!cadence_step_id || !new_due_on) {
+    // #region agent log
+    const fs = require('fs');
+    const logEntry = JSON.stringify({location:'index.js:1639',message:'Backend endpoint validation failed',data:{contactCadenceId:contactCadenceId,cadence_step_id:cadence_step_id,new_due_on:new_due_on},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})+'\n';
+    fs.appendFileSync('c:\\ReachVue\\.cursor\\debug.log', logEntry);
+    // #endregion
     return res
       .status(400)
       .send('cadence_step_id and new_due_on are required');
@@ -1659,7 +1677,7 @@ if (newDueDate <= today) {
       `
       UPDATE cadence_step_states
       SET
-        due_on = $3::date,
+        due_on = TO_DATE($3, 'YYYY-MM-DD'),
         updated_at = NOW()
       WHERE contact_cadence_id = $1
         AND cadence_step_id = $2
@@ -1677,21 +1695,38 @@ if (newDueDate <= today) {
     // Log history
     await client.query(
       `
-      INSERT INTO contact_cadence_history
-      (contact_cadence_id, cadence_step_id, event_type, metadata, event_at)
-      VALUES ($1, $2, 'postponed', jsonb_build_object('new_due_on', $3), NOW())
+     INSERT INTO contact_cadence_history
+(contact_cadence_id, cadence_step_id, event_type, metadata, event_at)
+VALUES (
+  $1,
+  $2,
+  'postponed',
+  jsonb_build_object('new_due_on', $3::text),
+  NOW()
+)
+
       `,
       [contactCadenceId, cadence_step_id, new_due_on]
     );
 
     await client.query('COMMIT');
 
+    // #region agent log
+    const fs = require('fs');
+    const logEntry = JSON.stringify({location:'index.js:1689',message:'Backend endpoint success response',data:{success:true,step:updateResult.rows[0]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})+'\n';
+    fs.appendFileSync('c:\\ReachVue\\.cursor\\debug.log', logEntry);
+    // #endregion
     res.json({
       success: true,
       step: updateResult.rows[0],
     });
   } catch (err) {
     await client.query('ROLLBACK');
+    // #region agent log
+    const fs = require('fs');
+    const logEntry = JSON.stringify({location:'index.js:1694',message:'Backend endpoint error',data:{error:err.message,stack:err.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})+'\n';
+    fs.appendFileSync('c:\\ReachVue\\.cursor\\debug.log', logEntry);
+    // #endregion
     console.error('Postpone step error:', err);
     res.status(500).send('Failed to postpone step');
   } finally {
