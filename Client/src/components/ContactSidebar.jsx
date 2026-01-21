@@ -47,7 +47,7 @@ export default function ContactSidebar({
     setLoadingTouches(true)
     try {
       const res = await fetch(
-        `http://localhost:3000/touches?contact_id=${contact.id}&offset=0&limit=3`
+        `http://localhost:3000/touches?contact_id=${contact.id}&offset=0&limit=5`
       )
       if (!res.ok) throw new Error("Failed to fetch touches")
       const data = await res.json()
@@ -113,7 +113,7 @@ export default function ContactSidebar({
     setShowEditModal(false)
   }
 
-  // Format touch timestamp - relative format
+  // Format touch timestamp
   const formatTouchDate = (dateString) => {
     if (!dateString) return ""
     const date = new Date(dateString)
@@ -125,10 +125,12 @@ export default function ContactSidebar({
 
     if (diffMins < 1) return "Just now"
     if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    if (diffDays === 1) return "Yesterday"
-    if (diffDays < 7) return `${diffDays}d ago`
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    if (diffHours < 24) return `Today, ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+    if (diffDays === 1) return `Yesterday, ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+    if (diffDays < 7) {
+      return `${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+    }
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + ", " + date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
   }
 
   // Format touch type label
@@ -144,151 +146,140 @@ export default function ContactSidebar({
     return typeMap[touchType.toLowerCase()] || touchType.charAt(0).toUpperCase() + touchType.slice(1) + " Logged"
   }
 
-  // Get touch type icon
-  const getTouchTypeIcon = (touchType) => {
-    switch (touchType?.toLowerCase()) {
-      case "email":
-        return <MailIcon className="h-3 w-3 text-gray-400" />
-      case "call":
-        return <PhoneIcon className="h-3 w-3 text-gray-400" />
-      case "linkedin":
-        return <LinkedinIcon className="h-3 w-3 text-gray-400" />
-      case "touch":
-        return <ClockIcon className="h-3 w-3 text-gray-400" />
-      default:
-        return <ClockIcon className="h-3 w-3 text-gray-400" />
-    }
-  }
-
   return (
     <>
-      <div className="w-96 border-l bg-white shadow-lg h-[calc(100vh-150px)] p-4 flex flex-col overflow-hidden">
-        {/* Identity Section - Fixed, non-scrollable */}
-        <div className="flex-shrink-0">
-          <div className="flex justify-between items-start mb-2">
-            <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-semibold leading-tight">{localContact.first_name} {localContact.last_name}</h2>
-              {localContact.title && (
-                <p className="text-xs text-gray-500 mt-0.5">{localContact.title}</p>
-              )}
-              {localContact.company && (
-                <p className="text-xs text-gray-500 mt-0.5">{localContact.company}</p>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-              <button
-                onClick={() => setShowEditModal(true)}
-                className="text-xs text-blue-600 hover:text-blue-700 hover:underline"
-              >
-                Edit
-              </button>
-              <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+      <div className="w-96 border-l bg-white shadow-lg h-[calc(100vh-150px)] overflow-y-auto p-4 flex flex-col">
+        {/* Header */}
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-xl font-semibold">{localContact.first_name} {localContact.last_name}</h2>
+            <p className="text-sm text-gray-500">{localContact.title}</p>
           </div>
-
-          {/* Primary Actions */}
-          <div className="flex gap-1.5 mb-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onEmail && onEmail(localContact)}
-              className="flex-1 flex items-center justify-center gap-1 h-7 text-xs px-2"
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
             >
-              <MailIcon className="h-3 w-3" />
-              Email
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onCall && onCall(localContact)}
-              className="flex-1 flex items-center justify-center gap-1 h-7 text-xs px-2"
-            >
-              <PhoneIcon className="h-3 w-3" />
-              Call
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onTouch && onTouch(localContact)}
-              className="flex-1 flex items-center justify-center gap-1 h-7 text-xs px-2"
-            >
-              <ClockIcon className="h-3 w-3" />
-              Touch
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onLinkedIn && onLinkedIn(localContact)}
-              className="flex-1 flex items-center justify-center gap-1 h-7 text-xs px-2"
-            >
-              <LinkedinIcon className="h-3 w-3" />
-              LinkedIn
+              Edit
+            </button>
+            <Button variant="ghost" size="icon" onClick={onClose}>
+              <X className="h-5 w-5" />
             </Button>
           </div>
+        </div>
 
-          {/* Contact Info */}
-          <div className="mb-3">
-            <h3 className="text-xs font-medium mb-1.5 text-gray-700">Contact</h3>
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5 text-xs">
-                <MailIcon className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                <span className="text-gray-700 truncate">{localContact.email || "—"}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs">
-                <PhoneIcon className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                <span className="text-gray-700">{localContact.mobile_phone || "—"}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs">
-                <LinkedinIcon className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                <span className="text-gray-700 truncate">{localContact.linkedin_url || "—"}</span>
-              </div>
-            </div>
-          </div>
+        {/* Action Buttons */}
+        <div className="flex gap-2 mb-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onEmail && onEmail(localContact)}
+            className="flex-1 flex items-center justify-center gap-1.5 text-xs"
+          >
+            <MailIcon className="h-3.5 w-3.5" />
+            Email
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onCall && onCall(localContact)}
+            className="flex-1 flex items-center justify-center gap-1.5 text-xs"
+          >
+            <PhoneIcon className="h-3.5 w-3.5" />
+            Call
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onTouch && onTouch(localContact)}
+            className="flex-1 flex items-center justify-center gap-1.5 text-xs"
+          >
+            <ClockIcon className="h-3.5 w-3.5" />
+            Touch
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onLinkedIn && onLinkedIn(localContact)}
+            className="flex-1 flex items-center justify-center gap-1.5 text-xs"
+          >
+            <LinkedinIcon className="h-3.5 w-3.5" />
+            LinkedIn
+          </Button>
+        </div>
 
-          {/* Tags - Inline Editable */}
-          <div className="mb-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <h3 className="text-xs font-medium flex items-center gap-1 text-gray-700">
-                <TagIcon className="h-3 w-3 text-gray-500" /> Tags
-              </h3>
-              <button
-                onClick={() => setShowTagsModal(true)}
-                className="text-xs text-blue-600 hover:text-blue-700 hover:underline"
-              >
-                Edit
-              </button>
-            </div>
-            {localContact.tags?.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {localContact.tags.map((tag, i) => (
-                  <span
-                    key={i}
-                    className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800"
-                  >
-                    {tag.tag_name}
-                  </span>
-                ))}
+        {/* Contact Section - Compact */}
+        <div className="mb-4">
+          <h3 className="text-sm font-medium mb-2">Contact</h3>
+          <div className="space-y-2">
+            {localContact.email && (
+              <div className="flex items-center gap-2 text-sm">
+                <MailIcon className="h-3.5 w-3.5 text-gray-400" />
+                <span className="text-gray-700">{localContact.email}</span>
               </div>
-            ) : (
-              <p className="text-xs text-gray-500">No tags</p>
+            )}
+            {localContact.mobile_phone && (
+              <div className="flex items-center gap-2 text-sm">
+                <PhoneIcon className="h-3.5 w-3.5 text-gray-400" />
+                <span className="text-gray-700">{localContact.mobile_phone}</span>
+              </div>
+            )}
+            {localContact.linkedin_url && (
+              <div className="flex items-center gap-2 text-sm">
+                <LinkedinIcon className="h-3.5 w-3.5 text-gray-400" />
+                <a 
+                  href={localContact.linkedin_url} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-blue-600 hover:underline"
+                >
+                  {localContact.linkedin_url}
+                </a>
+              </div>
             )}
           </div>
         </div>
 
-        {/* Notes - Inline Editable with Internal Scrolling */}
-        <div className="mb-3 flex-shrink-0">
-          <h3 className="text-xs font-medium mb-1.5 text-gray-700">Notes</h3>
+        {/* Tags - Inline Editable */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium flex items-center gap-1">
+              <TagIcon className="h-4 w-4 text-gray-500" /> Tags
+            </h3>
+            <button
+              onClick={() => setShowTagsModal(true)}
+              className="text-xs text-blue-600 hover:text-blue-700 hover:underline"
+            >
+              Edit
+            </button>
+          </div>
+          {localContact.tags?.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {localContact.tags.map((tag, i) => (
+                <span
+                  key={i}
+                  className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
+                >
+                  {tag.tag_name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">No tags</p>
+          )}
+        </div>
+
+        {/* Notes - Inline Editable */}
+        <div className="mb-4">
+          <h3 className="text-sm font-medium mb-2">Notes</h3>
           {isEditingNotes ? (
             <div className="space-y-2">
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-blue-500"
                 rows={4}
                 placeholder="Add notes..."
-                autoFocus
               />
               <div className="flex gap-2">
                 <Button
@@ -313,20 +304,19 @@ export default function ContactSidebar({
               </div>
             </div>
           ) : (
-            <div
-              onClick={() => setIsEditingNotes(true)}
-              className="min-h-[60px] max-h-[80px] overflow-y-auto border border-transparent hover:border-gray-200 rounded-md p-2 cursor-text transition-colors"
-              style={{
-                scrollbarWidth: "thin",
-                scrollbarColor: "#cbd5e1 transparent"
-              }}
-            >
+            <div>
               {notes ? (
-                <p className="text-xs text-gray-700 whitespace-pre-wrap">
+                <p 
+                  className="text-sm text-gray-700 whitespace-pre-wrap cursor-pointer hover:bg-gray-50 p-2 rounded"
+                  onClick={() => setIsEditingNotes(true)}
+                >
                   {notes}
                 </p>
               ) : (
-                <p className="text-xs text-gray-400 italic">
+                <p 
+                  className="text-sm text-gray-500 cursor-pointer hover:bg-gray-50 p-2 rounded"
+                  onClick={() => setIsEditingNotes(true)}
+                >
                   Click to add notes...
                 </p>
               )}
@@ -334,18 +324,18 @@ export default function ContactSidebar({
           )}
         </div>
 
-        {/* Activity - Preview Only, Non-scrollable */}
-        <div className="flex-shrink-0">
-          <div className="flex items-center justify-between mb-1.5">
-            <h3 className="text-xs font-medium flex items-center gap-1 text-gray-600">
-              <ClockIcon className="h-3 w-3 text-gray-400" /> Activity
+        {/* Touch History / Activity Timeline */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium flex items-center gap-1">
+              <ClockIcon className="h-4 w-4 text-gray-500" /> Activity
             </h3>
             {recentTouches.length > 0 && (
               <button
                 onClick={() => setShowHistoryModal(true)}
                 className="text-xs text-blue-600 hover:text-blue-700 hover:underline"
               >
-                View full history
+                View all history
               </button>
             )}
           </div>
@@ -355,27 +345,26 @@ export default function ContactSidebar({
           ) : recentTouches.length === 0 ? (
             <p className="text-xs text-gray-500">No activity yet</p>
           ) : (
-            <div className="space-y-1.5">
-              {recentTouches.slice(0, 3).map((touch) => (
-                <div key={touch.id} className="flex items-start gap-2 py-1">
-                  <div className="flex-shrink-0 mt-0.5">
-                    {getTouchTypeIcon(touch.touch_type)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-gray-600">
-                        {formatTouchType(touch.touch_type)}
-                      </span>
-                      <span className="text-xs text-gray-400">·</span>
-                      <span className="text-xs text-gray-500">
-                        {formatTouchDate(touch.touched_at)}
-                      </span>
+            <div className="space-y-2">
+              {recentTouches.map((touch) => (
+                <div key={touch.id} className="border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="text-xs font-medium text-gray-700">
+                          {formatTouchType(touch.touch_type)}
+                        </span>
+                        <span className="text-xs text-gray-400">·</span>
+                        <span className="text-xs text-gray-500">
+                          {formatTouchDate(touch.touched_at)}
+                        </span>
+                      </div>
+                      {touch.touch_type === "email" && touch.subject && (
+                        <p className="text-xs text-gray-600 mt-0.5 truncate">
+                          {touch.subject}
+                        </p>
+                      )}
                     </div>
-                    {touch.touch_type === "email" && touch.subject && (
-                      <p className="text-xs text-gray-500 mt-0.5 truncate">
-                        {touch.subject}
-                      </p>
-                    )}
                   </div>
                 </div>
               ))}
