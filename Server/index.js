@@ -1814,5 +1814,64 @@ app.get('/contact-cadences/:id/history', async (req, res) => {
   }
 });
 
+// Get all cadence history for a contact within a specific cadence (across all runs)
+app.get('/cadences/:cadenceId/contacts/:contactId/history', async (req, res) => {
+  const cadenceId = req.params.cadenceId;
+  const contactId = req.params.contactId;
+  const limit = parseInt(req.query.limit, 10) || 20;
+  const offset = parseInt(req.query.offset, 10) || 0;
+
+  try {
+    // Count total history events for this contact+cadence combination
+    const totalResult = await pool.query(
+      `
+      SELECT COUNT(*) 
+      FROM contact_cadence_history h
+      INNER JOIN contact_cadences cc
+        ON cc.id = h.contact_cadence_id
+      WHERE cc.contact_id = $1
+        AND cc.cadence_id = $2
+      `,
+      [contactId, cadenceId]
+    );
+    const total = parseInt(totalResult.rows[0].count, 10);
+
+    // Fetch paginated history with step details
+    const result = await pool.query(
+      `
+      SELECT
+        h.id,
+        h.event_type,
+        h.event_at,
+        h.cadence_step_id,
+        cs.step_label,
+        cs.day_number,
+        h.metadata
+      FROM contact_cadence_history h
+      INNER JOIN contact_cadences cc
+        ON cc.id = h.contact_cadence_id
+      LEFT JOIN cadence_steps cs
+        ON cs.id = h.cadence_step_id
+      WHERE cc.contact_id = $1
+        AND cc.cadence_id = $2
+      ORDER BY h.event_at DESC
+      LIMIT $3 OFFSET $4
+      `,
+      [contactId, cadenceId, limit, offset]
+    );
+
+    res.json({
+      items: result.rows,
+      offset,
+      limit,
+      total,
+      hasOlder: offset + limit < total
+    });
+  } catch (err) {
+    console.error('Error fetching cadence history by contact and cadence:', err);
+    res.status(500).send('Failed to fetch cadence history');
+  }
+});
+
 
 

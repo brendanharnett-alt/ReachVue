@@ -1502,6 +1502,7 @@ export default function CadenceDetailPage() {
           setTimelineContact(null);
         }}
         contact={timelineContact}
+        cadenceId={cadenceId}
         cadenceName={cadenceName}
       />
     </div>

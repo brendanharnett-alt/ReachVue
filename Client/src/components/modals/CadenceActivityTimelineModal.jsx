@@ -16,7 +16,7 @@ import {
   Clock,
   Calendar,
 } from "lucide-react"
-import { fetchCadenceHistory } from "@/api"
+import { fetchCadenceHistoryByContactAndCadence } from "@/api"
 
 // Format date: "November 19th, 2025 · 6:23 PM"
 function formatDateWithOrdinal(dateString) {
@@ -100,6 +100,7 @@ export default function CadenceActivityTimelineModal({
   open,
   onClose,
   contact,
+  cadenceId,
   cadenceName,
 }) {
   const [timelineData, setTimelineData] = useState([])
@@ -110,12 +111,12 @@ export default function CadenceActivityTimelineModal({
   const [limit] = useState(20)
   const [error, setError] = useState(null)
 
-  // Get contact_cadence_id from contact
-  const contactCadenceId = contact?.id
+  // Get contactId from contact object (contactId is the actual contact_id, not contact_cadence_id)
+  const contactId = contact?.contactId
 
   // Fetch history when modal opens
   useEffect(() => {
-    if (!open || !contactCadenceId) {
+    if (!open || !contactId || !cadenceId) {
       setTimelineData([])
       setOffset(0)
       setHasOlder(false)
@@ -127,7 +128,7 @@ export default function CadenceActivityTimelineModal({
       setLoading(true)
       setError(null)
       try {
-        const data = await fetchCadenceHistory(contactCadenceId, 0, limit)
+        const data = await fetchCadenceHistoryByContactAndCadence(cadenceId, contactId, 0, limit)
         setTimelineData(data.items || data.events || [])
         setHasOlder(data.hasOlder || false)
         setOffset(data.offset || 0)
@@ -141,15 +142,15 @@ export default function CadenceActivityTimelineModal({
     }
 
     fetchHistory()
-  }, [open, contactCadenceId, limit])
+  }, [open, contactId, cadenceId, limit])
 
   const handleLoadEarlier = async () => {
-    if (!contactCadenceId || loadingEarlier || !hasOlder) return
+    if (!contactId || !cadenceId || loadingEarlier || !hasOlder) return
 
     setLoadingEarlier(true)
     try {
       const newOffset = offset + limit
-      const data = await fetchCadenceHistory(contactCadenceId, newOffset, limit)
+      const data = await fetchCadenceHistoryByContactAndCadence(cadenceId, contactId, newOffset, limit)
       
       // Append new events to existing timeline
       setTimelineData((prev) => [...prev, ...(data.items || data.events || [])])
