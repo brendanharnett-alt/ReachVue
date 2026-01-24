@@ -1769,4 +1769,50 @@ app.get('/contact-cadences/:id/steps', async (req, res) => {
   }
 });
 
+app.get('/contact-cadences/:id/history', async (req, res) => {
+  const contactCadenceId = req.params.id;
+  const limit = parseInt(req.query.limit, 10) || 20;
+  const offset = parseInt(req.query.offset, 10) || 0;
+
+  try {
+    const totalResult = await pool.query(
+      `SELECT COUNT(*) FROM contact_cadence_history WHERE contact_cadence_id = $1`,
+      [contactCadenceId]
+    );
+    const total = parseInt(totalResult.rows[0].count, 10);
+
+    const result = await pool.query(
+      `
+      SELECT
+        h.id,
+        h.event_type,
+        h.event_at,
+        h.cadence_step_id,
+        cs.step_label,
+        cs.day_number,
+        h.metadata
+      FROM contact_cadence_history h
+      LEFT JOIN cadence_steps cs
+        ON cs.id = h.cadence_step_id
+      WHERE h.contact_cadence_id = $1
+      ORDER BY h.event_at DESC
+      LIMIT $2 OFFSET $3
+      `,
+      [contactCadenceId, limit, offset]
+    );
+
+    res.json({
+      items: result.rows,
+      offset,
+      limit,
+      total,
+      hasOlder: offset + limit < total
+    });
+  } catch (err) {
+    console.error('Error fetching cadence history:', err);
+    res.status(500).send('Failed to fetch cadence history');
+  }
+});
+
+
 

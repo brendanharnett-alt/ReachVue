@@ -390,6 +390,19 @@ export async function fetchContactCadenceSteps(contactCadenceId) {
   }
 }
 
+export async function fetchCadenceHistory(contactCadenceId, offset = 0, limit = 20) {
+  try {
+    const res = await fetch(
+      `${BASE_URL}/contact-cadences/${contactCadenceId}/history?offset=${offset}&limit=${limit}`
+    )
+    if (!res.ok) throw new Error("Failed to fetch cadence history")
+    return await res.json()
+  } catch (err) {
+    console.error("Fetch cadence history error:", err)
+    throw err
+  }
+}
+
 export async function deleteCadence(cadenceId) {
   try {
     // #region agent log

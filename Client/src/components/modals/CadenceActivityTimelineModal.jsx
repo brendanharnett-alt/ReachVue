@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -9,15 +9,14 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import {
-  Mail,
-  Phone,
-  Linkedin,
   CheckCircle,
   SkipForward,
   UserPlus,
   UserMinus,
   Clock,
+  Calendar,
 } from "lucide-react"
+import { fetchCadenceHistory } from "@/api"
 
 // Format date: "November 19th, 2025 · 6:23 PM"
 function formatDateWithOrdinal(dateString) {
@@ -50,123 +49,51 @@ function formatDateWithOrdinal(dateString) {
   return `${month} ${day}${getOrdinal(day)}, ${year} · ${hours}`
 }
 
-// Generate mock timeline data
-function generateMockTimelineData(contact, cadenceName) {
-  const now = new Date()
-  const events = []
+// Map event type to icon and color
+function getEventIcon(eventType) {
+  switch (eventType) {
+    case "added":
+      return { icon: UserPlus, color: "text-blue-600", borderColor: "border-blue-600" }
+    case "completed":
+      return { icon: CheckCircle, color: "text-green-600", borderColor: "border-green-600" }
+    case "skipped":
+      return { icon: SkipForward, color: "text-orange-600", borderColor: "border-orange-600" }
+    case "postponed":
+      return { icon: Calendar, color: "text-purple-600", borderColor: "border-purple-600" }
+    case "ended":
+      return { icon: UserMinus, color: "text-red-600", borderColor: "border-red-600" }
+    default:
+      return { icon: Clock, color: "text-gray-600", borderColor: "border-gray-600" }
+  }
+}
 
-  // Add to cadence event (oldest)
-  events.push({
-    id: "1",
-    type: "added",
-    label: "Added to cadence",
-    secondaryText: null,
-    timestamp: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days ago
-    icon: UserPlus,
-    iconColor: "text-blue-600",
-  })
+// Map event type to label
+function getEventLabel(eventType) {
+  switch (eventType) {
+    case "added":
+      return "Added to cadence"
+    case "completed":
+      return "Step completed"
+    case "skipped":
+      return "Step skipped"
+    case "postponed":
+      return "Step postponed"
+    case "ended":
+      return "Cadence ended"
+    default:
+      return "Activity"
+  }
+}
 
-  // Step completed events
-  events.push({
-    id: "2",
-    type: "step_completed",
-    label: "Step completed",
-    secondaryText: "Day 0: Step 1 - Initial Outreach Email",
-    timestamp: new Date(now.getTime() - 12 * 24 * 60 * 60 * 1000).toISOString(), // 12 days ago
-    icon: CheckCircle,
-    iconColor: "text-green-600",
-  })
-
-  // Email sent (linked to cadence)
-  events.push({
-    id: "3",
-    type: "email_sent",
-    label: "Email sent",
-    secondaryText: "Day 0: Step 1 - Initial Outreach Email",
-    timestamp: new Date(now.getTime() - 12 * 24 * 60 * 60 * 1000 + 5 * 60 * 1000).toISOString(), // 12 days ago + 5 min
-    icon: Mail,
-    iconColor: "text-teal-600",
-  })
-
-  // Step completed
-  events.push({
-    id: "4",
-    type: "step_completed",
-    label: "Step completed",
-    secondaryText: "Day 2: Step 2 - LinkedIn Connection Request",
-    timestamp: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString(), // 10 days ago
-    icon: CheckCircle,
-    iconColor: "text-green-600",
-  })
-
-  // LinkedIn touch
-  events.push({
-    id: "5",
-    type: "linkedin_touch",
-    label: "LinkedIn touch",
-    secondaryText: "Day 2: Step 2 - LinkedIn Connection Request",
-    timestamp: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000 + 10 * 60 * 1000).toISOString(), // 10 days ago + 10 min
-    icon: Linkedin,
-    iconColor: "text-blue-600",
-  })
-
-  // Step skipped
-  events.push({
-    id: "6",
-    type: "step_skipped",
-    label: "Step skipped",
-    secondaryText: "Day 4: Step 3 - Follow-up Email",
-    timestamp: new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000).toISOString(), // 8 days ago
-    icon: SkipForward,
-    iconColor: "text-orange-600",
-  })
-
-  // Step completed
-  events.push({
-    id: "7",
-    type: "step_completed",
-    label: "Step completed",
-    secondaryText: "Day 7: Step 4 - Phone Call",
-    timestamp: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days ago
-    icon: CheckCircle,
-    iconColor: "text-green-600",
-  })
-
-  // Call logged
-  events.push({
-    id: "8",
-    type: "call_logged",
-    label: "Call logged",
-    secondaryText: "Day 7: Step 4 - Phone Call",
-    timestamp: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000 + 15 * 60 * 1000).toISOString(), // 5 days ago + 15 min
-    icon: Phone,
-    iconColor: "text-orange-600",
-  })
-
-  // Email sent
-  events.push({
-    id: "9",
-    type: "email_sent",
-    label: "Email sent",
-    secondaryText: "Day 9: Step 5 - Value Proposition Email",
-    timestamp: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
-    icon: Mail,
-    iconColor: "text-teal-600",
-  })
-
-  // Step completed
-  events.push({
-    id: "10",
-    type: "step_completed",
-    label: "Step completed",
-    secondaryText: "Day 9: Step 5 - Value Proposition Email",
-    timestamp: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000 + 2 * 60 * 1000).toISOString(), // 3 days ago + 2 min
-    icon: CheckCircle,
-    iconColor: "text-green-600",
-  })
-
-  // Sort by timestamp (newest first)
-  return events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+// Format secondary text with step info
+function formatSecondaryText(dayNumber, stepLabel) {
+  if (dayNumber !== null && dayNumber !== undefined && stepLabel) {
+    return `Day ${dayNumber}: ${stepLabel}`
+  }
+  if (stepLabel) {
+    return stepLabel
+  }
+  return null
 }
 
 export default function CadenceActivityTimelineModal({
@@ -175,43 +102,81 @@ export default function CadenceActivityTimelineModal({
   contact,
   cadenceName,
 }) {
+  const [timelineData, setTimelineData] = useState([])
+  const [loading, setLoading] = useState(false)
   const [loadingEarlier, setLoadingEarlier] = useState(false)
-  const [hasEarlier, setHasEarlier] = useState(true) // Mock: assume there's more
+  const [hasOlder, setHasOlder] = useState(false)
+  const [offset, setOffset] = useState(0)
+  const [limit] = useState(20)
+  const [error, setError] = useState(null)
 
-  // Generate mock timeline data
-  const timelineData = contact
-    ? generateMockTimelineData(contact, cadenceName)
-    : []
+  // Get contact_cadence_id from contact
+  const contactCadenceId = contact?.id
 
-  const handleLoadEarlier = () => {
+  // Fetch history when modal opens
+  useEffect(() => {
+    if (!open || !contactCadenceId) {
+      setTimelineData([])
+      setOffset(0)
+      setHasOlder(false)
+      setError(null)
+      return
+    }
+
+    const fetchHistory = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const data = await fetchCadenceHistory(contactCadenceId, 0, limit)
+        setTimelineData(data.items || data.events || [])
+        setHasOlder(data.hasOlder || false)
+        setOffset(data.offset || 0)
+      } catch (err) {
+        console.error("Error fetching cadence history:", err)
+        setError("Failed to load cadence history")
+        setTimelineData([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchHistory()
+  }, [open, contactCadenceId, limit])
+
+  const handleLoadEarlier = async () => {
+    if (!contactCadenceId || loadingEarlier || !hasOlder) return
+
     setLoadingEarlier(true)
-    // Mock loading delay
-    setTimeout(() => {
+    try {
+      const newOffset = offset + limit
+      const data = await fetchCadenceHistory(contactCadenceId, newOffset, limit)
+      
+      // Append new events to existing timeline
+      setTimelineData((prev) => [...prev, ...(data.items || data.events || [])])
+      setHasOlder(data.hasOlder || false)
+      setOffset(newOffset)
+    } catch (err) {
+      console.error("Error loading earlier history:", err)
+      setError("Failed to load earlier activity")
+    } finally {
       setLoadingEarlier(false)
-      setHasEarlier(false) // Mock: no more after first load
-    }, 1000)
+    }
   }
 
-  const renderTimelineItem = (item, isLast = false) => {
-    const IconComponent = item.icon
-    // Map icon colors to border colors
-    const borderColorMap = {
-      "text-blue-600": "border-blue-600",
-      "text-green-600": "border-green-600",
-      "text-teal-600": "border-teal-600",
-      "text-orange-600": "border-orange-600",
-    }
-    const borderColor = borderColorMap[item.iconColor] || "border-gray-400"
+  const renderTimelineItem = (event, isLast = false) => {
+    const { icon: IconComponent, color, borderColor } = getEventIcon(event.event_type)
+    const label = getEventLabel(event.event_type)
+    const secondaryText = formatSecondaryText(event.day_number, event.step_label)
 
     return (
       <div
-        key={item.id}
+        key={event.id}
         className={`flex gap-4 ${isLast ? "pb-0" : "pb-4 border-l-2 border-gray-200"} pl-4 relative`}
       >
         {/* Timeline dot */}
         <div className="absolute -left-[9px] top-0">
           <div className={`w-4 h-4 rounded-full bg-white border-2 ${borderColor} flex items-center justify-center`}>
-            <IconComponent className={`h-2.5 w-2.5 ${item.iconColor}`} />
+            <IconComponent className={`h-2.5 w-2.5 ${color}`} />
           </div>
         </div>
 
@@ -221,16 +186,16 @@ export default function CadenceActivityTimelineModal({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-sm font-medium text-gray-900">
-                  {item.label}
+                  {label}
                 </span>
               </div>
-              {item.secondaryText && (
+              {secondaryText && (
                 <div className="text-xs text-gray-500 mb-1">
-                  {item.secondaryText}
+                  {secondaryText}
                 </div>
               )}
               <div className="text-xs text-gray-400">
-                {formatDateWithOrdinal(item.timestamp)}
+                {formatDateWithOrdinal(event.event_at)}
               </div>
             </div>
           </div>
@@ -269,13 +234,21 @@ export default function CadenceActivityTimelineModal({
         </DialogHeader>
 
         <div className="mt-6 space-y-0">
-          {timelineData.length === 0 ? (
+          {loading && timelineData.length === 0 ? (
+            <p className="text-sm text-gray-500 py-8 text-center">
+              Loading activity history...
+            </p>
+          ) : error ? (
+            <p className="text-sm text-red-500 py-8 text-center">
+              {error}
+            </p>
+          ) : timelineData.length === 0 ? (
             <p className="text-sm text-gray-500 py-8 text-center">
               No activity found for this contact in this cadence.
             </p>
           ) : (
             <>
-              {hasEarlier && (
+              {hasOlder && (
                 <div className="flex items-center justify-center mb-4 pb-4 border-b">
                   <button
                     type="button"
@@ -299,9 +272,9 @@ export default function CadenceActivityTimelineModal({
               )}
 
               <div className="space-y-0">
-                {timelineData.map((item, index) => {
-                  const isLast = index === timelineData.length - 1
-                  return renderTimelineItem(item, isLast)
+                {timelineData.map((event, index) => {
+                  const isLast = index === timelineData.length - 1 && !hasOlder
+                  return renderTimelineItem(event, isLast)
                 })}
               </div>
             </>
