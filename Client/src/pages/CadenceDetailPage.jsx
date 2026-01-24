@@ -31,6 +31,7 @@ import MultiActionModal from "@/components/modals/MultiActionModal";
 import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
 import AddStepModal from "@/components/modals/AddStepModal";
 import AddContactToCadenceModal from "@/components/modals/AddContactToCadenceModal";
+import CadenceActivityTimelineModal from "@/components/modals/CadenceActivityTimelineModal";
 import { fetchCadenceSteps, createCadenceStep, deleteCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts, removeContactFromCadence, skipCadenceStep, completeCadenceStep, postponeCadenceStep, fetchCadenceById } from "@/api";
 
 // Generate mock data with dates relative to today
@@ -239,6 +240,8 @@ export default function CadenceDetailPage() {
   const [draggedItem, setDraggedItem] = useState(null);
   const [draggedFromDay, setDraggedFromDay] = useState(null);
   const [dragOverDay, setDragOverDay] = useState(null);
+  const [timelineModalOpen, setTimelineModalOpen] = useState(false);
+  const [timelineContact, setTimelineContact] = useState(null);
 
   // Sync tab state with URL params
   useEffect(() => {
@@ -624,9 +627,13 @@ export default function CadenceDetailPage() {
   };
 
   const handleHistoricalActions = (personId, e) => {
-    e.stopPropagation();
-    // Placeholder - no implementation yet
-    console.log("Historical actions for person:", personId);
+    if (e) e.stopPropagation();
+    // Find the person/contact for the timeline modal
+    const person = peopleInCadence.find(p => p.id === personId || p.contactId === personId);
+    if (person) {
+      setTimelineContact(person);
+      setTimelineModalOpen(true);
+    }
   };
 
   const getActionIcon = (type) => {
@@ -1485,6 +1492,17 @@ export default function CadenceDetailPage() {
         onClose={() => setAddContactModalOpen(false)}
         onAdd={handleAddContact}
         cadenceId={cadenceId}
+      />
+
+      {/* Cadence Activity Timeline Modal */}
+      <CadenceActivityTimelineModal
+        open={timelineModalOpen}
+        onClose={() => {
+          setTimelineModalOpen(false);
+          setTimelineContact(null);
+        }}
+        contact={timelineContact}
+        cadenceName={cadenceName}
       />
     </div>
   );
