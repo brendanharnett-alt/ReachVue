@@ -60,6 +60,10 @@ function getEventIcon(eventType) {
       return { icon: SkipForward, color: "text-orange-600", borderColor: "border-orange-600" }
     case "postponed":
       return { icon: Calendar, color: "text-purple-600", borderColor: "border-purple-600" }
+    case "cadence_completed":
+      return { icon: CheckCircle, color: "text-green-600", borderColor: "border-green-600" }
+    case "contact_removed":
+      return { icon: UserMinus, color: "text-red-600", borderColor: "border-red-600" }
     case "ended":
       return { icon: UserMinus, color: "text-red-600", borderColor: "border-red-600" }
     default:
@@ -78,6 +82,10 @@ function getEventLabel(eventType) {
       return "Step skipped"
     case "postponed":
       return "Step postponed"
+    case "cadence_completed":
+      return "Cadence completed"
+    case "contact_removed":
+      return "Contact removed from cadence"
     case "ended":
       return "Cadence ended"
     default:

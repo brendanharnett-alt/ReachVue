@@ -1202,24 +1202,43 @@ app.post('/cadences/:cadenceId/contacts/bulk', async (req, res) => {
 app.delete('/contact-cadences/:id', async (req, res) => {
   const { id } = req.params;
 
+  const client = await pool.connect();
+
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    const result = await client.query(
       `
       UPDATE contact_cadences
       SET ended_at = NOW()
       WHERE id = $1 AND ended_at IS NULL
+      RETURNING id
       `,
       [id]
     );
 
     if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).send('Active contact cadence not found');
     }
 
+    await client.query(
+      `
+      INSERT INTO contact_cadence_history
+      (contact_cadence_id, event_type, event_at)
+      VALUES ($1, 'contact_removed', NOW())
+      `,
+      [id]
+    );
+
+    await client.query('COMMIT');
     res.send('Contact removed from cadence');
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Error removing contact from cadence:', err);
     res.status(500).send('Failed to remove contact from cadence');
+  } finally {
+    client.release();
   }
 });
 
@@ -1259,7 +1278,7 @@ app.put('/contact-cadences/:id/skip-step', async (req, res) => {
 
     const skippedStep = stepResult.rows[0];
 
-    // 2. Log history
+    // 2. Log step-level history (exactly once)
     await client.query(
       `
       INSERT INTO contact_cadence_history
@@ -1281,7 +1300,7 @@ app.put('/contact-cadences/:id/skip-step', async (req, res) => {
 
     const completedDay = dayResult.rows[0].day_number;
 
-    // 4. Check if all steps for that day are now done
+    // 4. Check if all steps for that day are now done (after step update)
     const pendingDaySteps = await client.query(
       `
       SELECT 1
@@ -1315,41 +1334,43 @@ app.put('/contact-cadences/:id/skip-step', async (req, res) => {
       );
     }
 
-        // 6. If NO pending steps remain at all, end the cadence run
-        const anyPendingLeft = await client.query(
-          `
-          SELECT 1
-          FROM cadence_step_states
-          WHERE contact_cadence_id = $1
-            AND status = 'pending'
-          LIMIT 1
-          `,
-          [contactCadenceId]
-        );
-    
-        const cadenceIsFinished = anyPendingLeft.rowCount === 0;
-    
-        if (cadenceIsFinished) {
-          await client.query(
-            `
-            UPDATE contact_cadences
-            SET ended_at = NOW(),
-                updated_at = NOW()
-            WHERE id = $1
-              AND ended_at IS NULL
-            `,
-            [contactCadenceId]
-          );
-    
-          await client.query(
-            `
-            INSERT INTO contact_cadence_history
-            (contact_cadence_id, event_type, event_at)
-            VALUES ($1, 'ended', NOW())
-            `,
-            [contactCadenceId]
-          );
-        }
+    // 6. Check if NO pending steps remain AFTER the step update (before finalization)
+    const anyPendingLeft = await client.query(
+      `
+      SELECT 1
+      FROM cadence_step_states
+      WHERE contact_cadence_id = $1
+        AND status = 'pending'
+      LIMIT 1
+      `,
+      [contactCadenceId]
+    );
+
+    const cadenceIsFinished = anyPendingLeft.rowCount === 0;
+
+    // 7. If cadence is finished, finalize it (update ended_at and log cadence_completed exactly once)
+    if (cadenceIsFinished) {
+      await client.query(
+        `
+        UPDATE contact_cadences
+        SET ended_at = NOW(),
+            updated_at = NOW()
+        WHERE id = $1
+          AND ended_at IS NULL
+        `,
+        [contactCadenceId]
+      );
+
+      // Log cadence_completed exactly once (no additional step history here)
+      await client.query(
+        `
+        INSERT INTO contact_cadence_history
+        (contact_cadence_id, event_type, event_at)
+        VALUES ($1, 'cadence_completed', NOW() + INTERVAL '1 second')
+        `,
+        [contactCadenceId]
+      );
+    }
     
 
     await client.query('COMMIT');
@@ -1519,7 +1540,7 @@ app.put('/contact-cadences/:id/complete-step', async (req, res) => {
 
     const completedStep = stepResult.rows[0];
 
-    // 2. Log history
+    // 2. Log step-level history (exactly once)
     await client.query(
       `
       INSERT INTO contact_cadence_history
@@ -1541,7 +1562,7 @@ app.put('/contact-cadences/:id/complete-step', async (req, res) => {
 
     const completedDay = dayResult.rows[0].day_number;
 
-    // 4. Check if all steps for that day are now done
+    // 4. Check if all steps for that day are now done (after step update)
     const pendingDaySteps = await client.query(
       `
       SELECT 1
@@ -1575,41 +1596,43 @@ app.put('/contact-cadences/:id/complete-step', async (req, res) => {
       );
     }
 
-        // 6. If NO pending steps remain at all, end the cadence run
-        const anyPendingLeft = await client.query(
-          `
-          SELECT 1
-          FROM cadence_step_states
-          WHERE contact_cadence_id = $1
-            AND status = 'pending'
-          LIMIT 1
-          `,
-          [contactCadenceId]
-        );
-    
-        const cadenceIsFinished = anyPendingLeft.rowCount === 0;
-    
-        if (cadenceIsFinished) {
-          await client.query(
-            `
-            UPDATE contact_cadences
-            SET ended_at = NOW(),
-                updated_at = NOW()
-            WHERE id = $1
-              AND ended_at IS NULL
-            `,
-            [contactCadenceId]
-          );
-    
-          await client.query(
-            `
-            INSERT INTO contact_cadence_history
-            (contact_cadence_id, event_type, event_at)
-            VALUES ($1, 'ended', NOW())
-            `,
-            [contactCadenceId]
-          );
-        }
+    // 6. Check if NO pending steps remain AFTER the step update (before finalization)
+    const anyPendingLeft = await client.query(
+      `
+      SELECT 1
+      FROM cadence_step_states
+      WHERE contact_cadence_id = $1
+        AND status = 'pending'
+      LIMIT 1
+      `,
+      [contactCadenceId]
+    );
+
+    const cadenceIsFinished = anyPendingLeft.rowCount === 0;
+
+    // 7. If cadence is finished, finalize it (update ended_at and log cadence_completed exactly once)
+    if (cadenceIsFinished) {
+      await client.query(
+        `
+        UPDATE contact_cadences
+        SET ended_at = NOW(),
+            updated_at = NOW()
+        WHERE id = $1
+          AND ended_at IS NULL
+        `,
+        [contactCadenceId]
+      );
+
+      // Log cadence_completed exactly once (no additional step history here)
+      await client.query(
+        `
+        INSERT INTO contact_cadence_history
+        (contact_cadence_id, event_type, event_at)
+        VALUES ($1, 'cadence_completed', NOW() + INTERVAL '1 second')
+        `,
+        [contactCadenceId]
+      );
+    }
     
 
     await client.query('COMMIT');
