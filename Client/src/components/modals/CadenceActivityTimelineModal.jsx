@@ -71,8 +71,26 @@ function getEventIcon(eventType) {
   }
 }
 
+// Format postponed date from metadata (e.g., "Feb 1, 2026")
+function formatPostponedDate(newDueOn) {
+  if (!newDueOn) return null
+  
+  try {
+    const date = new Date(newDueOn)
+    if (isNaN(date.getTime())) return null
+    
+    const month = date.toLocaleString("en-US", { month: "short" })
+    const day = date.getDate()
+    const year = date.getFullYear()
+    
+    return `${month} ${day}, ${year}`
+  } catch (err) {
+    return null
+  }
+}
+
 // Map event type to label
-function getEventLabel(eventType) {
+function getEventLabel(eventType, metadata = null) {
   switch (eventType) {
     case "added":
       return "Added to cadence"
@@ -81,6 +99,12 @@ function getEventLabel(eventType) {
     case "skipped":
       return "Step skipped"
     case "postponed":
+      if (metadata?.new_due_on) {
+        const formattedDate = formatPostponedDate(metadata.new_due_on)
+        if (formattedDate) {
+          return `Step postponed to ${formattedDate}`
+        }
+      }
       return "Step postponed"
     case "cadence_completed":
       return "Cadence completed"
@@ -174,7 +198,7 @@ export default function CadenceActivityTimelineModal({
 
   const renderTimelineItem = (event, isLast = false) => {
     const { icon: IconComponent, color, borderColor } = getEventIcon(event.event_type)
-    const label = getEventLabel(event.event_type)
+    const label = getEventLabel(event.event_type, event.metadata)
     const secondaryText = formatSecondaryText(event.day_number, event.step_label)
 
     return (
