@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export default function AddStepModal({ open, onClose, onSuccess, dayNumber = 0 }) {
+export default function AddStepModal({ open, onClose, onSuccess, dayNumber = 0, onNext }) {
   const [formData, setFormData] = useState({
     step_label: "",
     action_type: "email",
@@ -49,14 +49,22 @@ export default function AddStepModal({ open, onClose, onSuccess, dayNumber = 0 }
       alert("Step name is required");
       return;
     }
-    try {
-      if (onSuccess) {
-        await onSuccess(formData);
+    // If onNext is provided, open content modal instead of submitting directly
+    if (onNext) {
+      onNext(formData);
+      // Don't call onClose here - let the parent handle closing this modal
+      // so it can preserve the metadata state
+    } else {
+      // Fallback to original behavior if onNext not provided
+      try {
+        if (onSuccess) {
+          await onSuccess(formData);
+        }
+        onClose();
+      } catch (err) {
+        // Don't close modal on error - let user see the error and try again
+        throw err;
       }
-      onClose();
-    } catch (err) {
-      // Don't close modal on error - let user see the error and try again
-      throw err;
     }
   };
 
@@ -160,7 +168,7 @@ export default function AddStepModal({ open, onClose, onSuccess, dayNumber = 0 }
             Cancel
           </Button>
           <Button onClick={handleSubmit} className="bg-primary text-white">
-            Add Step
+            Next: Content
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,7 +1,7 @@
 // src/pages/CadenceDetailPage.jsx
 
 import PostponePopover from "@/components/cadence/PostponePopover"
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +32,8 @@ import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
 import AddStepModal from "@/components/modals/AddStepModal";
 import AddContactToCadenceModal from "@/components/modals/AddContactToCadenceModal";
 import CadenceActivityTimelineModal from "@/components/modals/CadenceActivityTimelineModal";
+import StepContentModal from "@/components/modals/StepContentModal";
+import CadenceStepEmailModal from "@/components/modals/CadenceStepEmailModal";
 import { fetchCadenceSteps, createCadenceStep, deleteCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts, removeContactFromCadence, skipCadenceStep, completeCadenceStep, postponeCadenceStep, fetchCadenceById } from "@/api";
 
 // Generate mock data with dates relative to today
@@ -236,6 +238,10 @@ export default function CadenceDetailPage() {
   const [loadingSteps, setLoadingSteps] = useState(true);
   const [addStepModalOpen, setAddStepModalOpen] = useState(false);
   const [addStepDayNumber, setAddStepDayNumber] = useState(0);
+  const [contentModalOpen, setContentModalOpen] = useState(false);
+  const [emailContentModalOpen, setEmailContentModalOpen] = useState(false);
+  const [stepMetadata, setStepMetadata] = useState(null);
+  const isTransitioningToContent = useRef(false);
   const [cadenceActionsOpen, setCadenceActionsOpen] = useState(false);
   const [draggedItem, setDraggedItem] = useState(null);
   const [draggedFromDay, setDraggedFromDay] = useState(null);
@@ -725,8 +731,42 @@ export default function CadenceDetailPage() {
     setAddStepModalOpen(true);
   };
 
+  const handleNextToContent = (metadata) => {
+    // Set flag to prevent metadata reset during transition
+    isTransitioningToContent.current = true;
+    // Store metadata BEFORE closing the first modal
+    setStepMetadata(metadata);
+    // Close first modal and open appropriate content modal based on action_type
+    setAddStepModalOpen(false);
+    // Small delay to ensure state is set before opening next modal
+    setTimeout(() => {
+      if (metadata.action_type === "email") {
+        setEmailContentModalOpen(true);
+      } else {
+        setContentModalOpen(true);
+      }
+      // Reset flag after modals are set
+      isTransitioningToContent.current = false;
+    }, 0);
+  };
+
+  const handleBackToStepModal = () => {
+    setContentModalOpen(false);
+    setEmailContentModalOpen(false);
+    setAddStepModalOpen(true);
+  };
+
   const handleAddStepSuccess = async (formData) => {
     try {
+      // Debug logging
+      console.log('handleAddStepSuccess called with formData:', formData);
+      
+      // Validate required fields
+      if (!formData || !formData.step_label || formData.step_label.trim() === '') {
+        alert('Step name is required');
+        return;
+      }
+
       // Calculate step_order (next available order for this cadence)
       const allSteps = cadenceStructure.flatMap((day) => day.actions);
       const maxStepOrder = allSteps.length > 0 
@@ -734,14 +774,37 @@ export default function CadenceDetailPage() {
         : -1;
       const nextStepOrder = maxStepOrder + 1;
 
+      // Prepare action_value with content (for now, store as JSON string for placeholders)
+      let actionValue = null;
+      if (formData.email_subject || formData.email_body || formData.thread) {
+        actionValue = JSON.stringify({
+          email_subject: formData.email_subject || "",
+          email_body: formData.email_body || "",
+          thread: formData.thread || null,
+        });
+      } else if (formData.instructions) {
+        actionValue = JSON.stringify({
+          instructions: formData.instructions,
+        });
+      }
+
       // Create the step via API
-      await createCadenceStep(cadenceId, {
+      const stepPayload = {
         step_order: nextStepOrder,
-        day_number: formData.day_number,
+        day_number: formData.day_number || 0,
         step_label: formData.step_label,
-        action_type: formData.action_type,
-        action_value: null,
-      });
+        action_type: formData.action_type || 'task',
+        action_value: actionValue,
+      };
+      
+      console.log('Creating step with payload:', stepPayload);
+      await createCadenceStep(cadenceId, stepPayload);
+
+      // Reset modals and state
+      setAddStepModalOpen(false);
+      setContentModalOpen(false);
+      setEmailContentModalOpen(false);
+      setStepMetadata(null);
 
       // Reload steps from backend
       const steps = await fetchCadenceSteps(cadenceId);
@@ -1481,9 +1544,41 @@ export default function CadenceDetailPage() {
       {/* Add Step Modal */}
       <AddStepModal
         open={addStepModalOpen}
-        onClose={() => setAddStepModalOpen(false)}
+        onClose={() => {
+          setAddStepModalOpen(false);
+          // Only reset metadata if we're not transitioning to content modal
+          if (!isTransitioningToContent.current) {
+            setStepMetadata(null);
+          }
+        }}
         onSuccess={handleAddStepSuccess}
+        onNext={handleNextToContent}
         dayNumber={addStepDayNumber}
+      />
+
+      {/* Step Content Modal (Phone, LinkedIn, Task) */}
+      <StepContentModal
+        open={contentModalOpen}
+        onClose={() => {
+          setContentModalOpen(false);
+          setStepMetadata(null);
+        }}
+        onBack={handleBackToStepModal}
+        onSuccess={handleAddStepSuccess}
+        stepData={stepMetadata}
+        actionType={stepMetadata?.action_type}
+      />
+
+      {/* Email Content Modal */}
+      <CadenceStepEmailModal
+        open={emailContentModalOpen}
+        onClose={() => {
+          setEmailContentModalOpen(false);
+          setStepMetadata(null);
+        }}
+        onBack={handleBackToStepModal}
+        onSuccess={handleAddStepSuccess}
+        stepData={stepMetadata}
       />
 
       {/* Add Contact to Cadence Modal */}
