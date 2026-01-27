@@ -774,18 +774,32 @@ export default function CadenceDetailPage() {
         : -1;
       const nextStepOrder = maxStepOrder + 1;
 
-      // Prepare action_value with content (for now, store as JSON string for placeholders)
+      // Construct action_value JSON object based on step type
+      const actionType = formData.action_type || 'task';
       let actionValue = null;
-      if (formData.email_subject || formData.email_body || formData.thread) {
-        actionValue = JSON.stringify({
+
+      if (actionType === 'email') {
+        // Email step: include subject, body, and thread
+        actionValue = {
           email_subject: formData.email_subject || "",
           email_body: formData.email_body || "",
           thread: formData.thread || null,
-        });
-      } else if (formData.instructions) {
-        actionValue = JSON.stringify({
-          instructions: formData.instructions,
-        });
+        };
+      } else if (actionType === 'phone' || actionType === 'call') {
+        // Phone/Call step: include instructions
+        actionValue = {
+          instructions: formData.instructions || "",
+        };
+      } else if (actionType === 'linkedin') {
+        // LinkedIn step: include instructions
+        actionValue = {
+          instructions: formData.instructions || "",
+        };
+      } else if (actionType === 'task') {
+        // Task step: include instructions
+        actionValue = {
+          instructions: formData.instructions || "",
+        };
       }
 
       // Create the step via API
@@ -793,7 +807,7 @@ export default function CadenceDetailPage() {
         step_order: nextStepOrder,
         day_number: formData.day_number || 0,
         step_label: formData.step_label,
-        action_type: formData.action_type || 'task',
+        action_type: actionType,
         action_value: actionValue,
       };
       
