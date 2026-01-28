@@ -34,6 +34,9 @@ import AddContactToCadenceModal from "@/components/modals/AddContactToCadenceMod
 import CadenceActivityTimelineModal from "@/components/modals/CadenceActivityTimelineModal";
 import StepContentModal from "@/components/modals/StepContentModal";
 import CadenceStepEmailModal from "@/components/modals/CadenceStepEmailModal";
+import EmailModal from "@/components/modals/EmailModal";
+import CadenceCallModal from "@/components/modals/CadenceCallModal";
+import CadenceLinkedInModal from "@/components/modals/CadenceLinkedInModal";
 import { fetchCadenceSteps, createCadenceStep, deleteCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts, removeContactFromCadence, skipCadenceStep, completeCadenceStep, postponeCadenceStep, fetchCadenceById } from "@/api";
 
 // Generate mock data with dates relative to today
@@ -248,6 +251,17 @@ export default function CadenceDetailPage() {
   const [dragOverDay, setDragOverDay] = useState(null);
   const [timelineModalOpen, setTimelineModalOpen] = useState(false);
   const [timelineContact, setTimelineContact] = useState(null);
+  
+  // Step execution modal states
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailModalContact, setEmailModalContact] = useState(null);
+  const [emailModalStepData, setEmailModalStepData] = useState(null);
+  const [callModalOpen, setCallModalOpen] = useState(false);
+  const [callModalContact, setCallModalContact] = useState(null);
+  const [callModalStepData, setCallModalStepData] = useState(null);
+  const [linkedInModalOpen, setLinkedInModalOpen] = useState(false);
+  const [linkedInModalContact, setLinkedInModalContact] = useState(null);
+  const [linkedInModalStepData, setLinkedInModalStepData] = useState(null);
 
   // Sync tab state with URL params
   useEffect(() => {
@@ -394,10 +408,18 @@ export default function CadenceDetailPage() {
   };
 
   const handleExecuteAction = async (person, e) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:410',message:'handleExecuteAction called',data:{hasPerson:!!person,personId:person?.id,contactId:person?.contactId,currentStepOrder:person?.currentStepOrder,isMultiStep:person?.stepInfo?.isMultiStep,cadenceStructureLength:cadenceStructure?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
     e.stopPropagation();
     
     // Check if this is a multi-action step
     const isMultiStep = person.stepInfo?.isMultiStep === true;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:415',message:'isMultiStep check',data:{isMultiStep,stepInfo:person?.stepInfo},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     
     if (isMultiStep) {
       // Multi-action: open modal to show all steps for the day
@@ -421,19 +443,209 @@ export default function CadenceDetailPage() {
         handleOpenMultiActionModal(person);
       }
     } else {
-      // Single step: directly complete the step
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:437',message:'Single step path entered',data:{currentStepOrder:person?.currentStepOrder,cadenceStructureLength:cadenceStructure?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
+      // Single step: open appropriate modal based on action_type
       if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && cadenceStructure.length > 0) {
         const allSteps = cadenceStructure.flatMap((day) => day.actions);
         const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
-        if (currentStep && currentStep.id) {
-          // Complete the step directly
-          await handleCompleteStep(person.id, currentStep.id, e);
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:441',message:'Step lookup result',data:{hasCurrentStep:!!currentStep,currentStepId:currentStep?.id,currentStepType:currentStep?.type,currentStepActionType:currentStep?.action_type,currentStepLabel:currentStep?.label,actionValueType:typeof currentStep?.action_value,actionValue:currentStep?.action_value,allStepsCount:allSteps.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+        
+        if (!currentStep) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:444',message:'Current step not found - alerting',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
+          alert('Unable to determine which step to execute');
+          return;
+        }
+        
+        // Extract action_type and action_value from the step
+        const actionType = currentStep.type || currentStep.action_type || 'task';
+        let actionValue = currentStep.action_value || null;
+        
+        // Parse action_value if it's a string
+        if (typeof actionValue === 'string' && actionValue.trim()) {
+          try {
+            actionValue = JSON.parse(actionValue);
+          } catch (err) {
+            // If parsing fails, keep as string
+            console.warn('Failed to parse action_value as JSON:', err);
+          }
+        }
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:456',message:'Action type and value extracted',data:{actionType,actionValueType:typeof actionValue,actionValue,hasEmailSubject:!!actionValue?.email_subject,hasEmailBody:!!actionValue?.email_body,hasInstructions:!!actionValue?.instructions},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
+        
+        // Create contact object for modal
+        const contact = {
+          id: person.contactId,
+          first_name: person.firstName || person.first_name || '',
+          last_name: person.lastName || person.last_name || '',
+          email: person.email || null,
+        };
+        
+        // Open appropriate modal based on action_type
+        if (actionType === 'email') {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:461',message:'Opening email modal',data:{hasContact:!!contact,contactId:contact?.id,emailSubject:actionValue?.email_subject,emailBodyLength:actionValue?.email_body?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
+          
+          // Extract email data from action_value
+          const emailSubject = actionValue?.email_subject || '';
+          const emailBody = actionValue?.email_body || '';
+          
+          setEmailModalStepData({
+            initialSubject: emailSubject,
+            initialBody: emailBody,
+          });
+          setEmailModalContact(contact);
+          setEmailModalOpen(true);
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:471',message:'Email modal state set',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
+        } else if (actionType === 'phone' || actionType === 'call') {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:473',message:'Opening call modal',data:{hasContact:!!contact,contactId:contact?.id,instructions:actionValue?.instructions},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
+          
+          // Extract instructions from action_value
+          const instructions = actionValue?.instructions || '';
+          
+          setCallModalStepData({
+            instructions: instructions,
+          });
+          setCallModalContact(contact);
+          setCallModalOpen(true);
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:483',message:'Call modal state set',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
+        } else if (actionType === 'linkedin') {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:485',message:'Opening LinkedIn modal',data:{hasContact:!!contact,contactId:contact?.id,instructions:actionValue?.instructions},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
+          
+          // Extract instructions from action_value
+          const instructions = actionValue?.instructions || '';
+          
+          setLinkedInModalStepData({
+            instructions: instructions,
+          });
+          setLinkedInModalContact(contact);
+          setLinkedInModalOpen(true);
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:495',message:'LinkedIn modal state set',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
         } else {
-          alert('Unable to determine which step to complete');
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:497',message:'Unsupported action type',data:{actionType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+          // #endregion
+          alert(`Step type "${actionType}" is not yet supported for execution`);
         }
       } else {
-        alert('Unable to determine which step to complete');
+        alert('Unable to determine which step to execute');
       }
+    }
+  };
+
+  const handleExecuteStepFromMultiAction = (person, step) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:499',message:'handleExecuteStepFromMultiAction called',data:{hasPerson:!!person,hasStep:!!step,stepId:step?.cadence_step_id,stepActionType:step?.action_type,stepLabel:step?.step_label},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'Q'})}).catch(()=>{});
+    // #endregion
+    
+    // Close MultiActionModal
+    setMultiActionModalOpen(false);
+    
+    // Find the step in cadenceStructure to get action_value
+    const allSteps = cadenceStructure.flatMap((day) => day.actions);
+    const cadenceStep = allSteps.find((s) => s.id === step.cadence_step_id);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:507',message:'Step lookup from cadenceStructure',data:{hasCadenceStep:!!cadenceStep,cadenceStepId:cadenceStep?.id,actionValueType:typeof cadenceStep?.action_value},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'R'})}).catch(()=>{});
+    // #endregion
+    
+    if (!cadenceStep) {
+      alert('Unable to find step details');
+      return;
+    }
+    
+    // Extract action_type and action_value
+    const actionType = step.action_type || cadenceStep.type || cadenceStep.action_type || 'task';
+    let actionValue = cadenceStep.action_value || null;
+    
+    // Parse action_value if it's a string
+    if (typeof actionValue === 'string' && actionValue.trim()) {
+      try {
+        actionValue = JSON.parse(actionValue);
+      } catch (err) {
+        console.warn('Failed to parse action_value as JSON:', err);
+      }
+    }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:523',message:'Action type and value extracted',data:{actionType,actionValueType:typeof actionValue,hasEmailSubject:!!actionValue?.email_subject,hasEmailBody:!!actionValue?.email_body,hasInstructions:!!actionValue?.instructions},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'S'})}).catch(()=>{});
+    // #endregion
+    
+    // Create contact object for modal
+    const contact = {
+      id: person.contactId,
+      first_name: person.firstName || person.first_name || '',
+      last_name: person.lastName || person.last_name || '',
+      email: person.email || null,
+    };
+    
+    // Open appropriate modal based on action_type
+    if (actionType === 'email') {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:538',message:'Opening email modal from multi-action',data:{hasContact:!!contact,contactId:contact?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'T'})}).catch(()=>{});
+      // #endregion
+      
+      const emailSubject = actionValue?.email_subject || '';
+      const emailBody = actionValue?.email_body || '';
+      
+      setEmailModalStepData({
+        initialSubject: emailSubject,
+        initialBody: emailBody,
+      });
+      setEmailModalContact(contact);
+      setEmailModalOpen(true);
+    } else if (actionType === 'phone' || actionType === 'call') {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:550',message:'Opening call modal from multi-action',data:{hasContact:!!contact,contactId:contact?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'T'})}).catch(()=>{});
+      // #endregion
+      
+      const instructions = actionValue?.instructions || '';
+      
+      setCallModalStepData({
+        instructions: instructions,
+      });
+      setCallModalContact(contact);
+      setCallModalOpen(true);
+    } else if (actionType === 'linkedin') {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:562',message:'Opening LinkedIn modal from multi-action',data:{hasContact:!!contact,contactId:contact?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'T'})}).catch(()=>{});
+      // #endregion
+      
+      const instructions = actionValue?.instructions || '';
+      
+      setLinkedInModalStepData({
+        instructions: instructions,
+      });
+      setLinkedInModalContact(contact);
+      setLinkedInModalOpen(true);
+    } else {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:574',message:'Unsupported action type from multi-action',data:{actionType},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'U'})}).catch(()=>{});
+      // #endregion
+      alert(`Step type "${actionType}" is not yet supported for execution`);
     }
   };
 
@@ -1552,6 +1764,9 @@ export default function CadenceDetailPage() {
           onSkipStep={handleSkip}
           onPostponeStep={handlePostpone}
           onViewHistory={handleHistoricalActions}
+          onExecuteStep={handleExecuteStepFromMultiAction}
+          cadenceId={cadenceId}
+          cadenceStructure={cadenceStructure}
         />
       )}
 
@@ -1614,6 +1829,85 @@ export default function CadenceDetailPage() {
         cadenceId={cadenceId}
         cadenceName={cadenceName}
       />
+
+      {/* Email Modal for Step Execution */}
+      {emailModalContact && (
+        <>
+          {/* #region agent log */}
+          {(() => {
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:1680',message:'Email modal rendering',data:{emailModalOpen,hasContact:!!emailModalContact,contactId:emailModalContact?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
+            return null;
+          })()}
+          {/* #endregion */}
+          <EmailModal
+            open={emailModalOpen}
+            contact={emailModalContact}
+            onClose={() => {
+              setEmailModalOpen(false);
+              setEmailModalContact(null);
+              setEmailModalStepData(null);
+            }}
+            onSend={({ contactId, lastTouched }) => {
+              // Handle email sent - could refresh contact data here if needed
+            }}
+            initialSubject={emailModalStepData?.initialSubject || ""}
+            initialBody={emailModalStepData?.initialBody || ""}
+            cadenceId={cadenceId}
+          />
+        </>
+      )}
+
+      {/* Call Modal for Step Execution */}
+      {callModalContact && (
+        <>
+          {/* #region agent log */}
+          {(() => {
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:1700',message:'Call modal rendering',data:{callModalOpen,hasContact:!!callModalContact,contactId:callModalContact?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
+            return null;
+          })()}
+          {/* #endregion */}
+          <CadenceCallModal
+            isOpen={callModalOpen}
+            contact={callModalContact}
+            onClose={() => {
+              setCallModalOpen(false);
+              setCallModalContact(null);
+              setCallModalStepData(null);
+            }}
+            onSuccess={() => {
+              // Handle call logged - could refresh contact data here if needed
+            }}
+            instructions={callModalStepData?.instructions || ""}
+            cadenceId={cadenceId}
+          />
+        </>
+      )}
+
+      {/* LinkedIn Modal for Step Execution */}
+      {linkedInModalContact && (
+        <>
+          {/* #region agent log */}
+          {(() => {
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:1720',message:'LinkedIn modal rendering',data:{linkedInModalOpen,hasContact:!!linkedInModalContact,contactId:linkedInModalContact?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
+            return null;
+          })()}
+          {/* #endregion */}
+          <CadenceLinkedInModal
+            isOpen={linkedInModalOpen}
+            contact={linkedInModalContact}
+            onClose={() => {
+              setLinkedInModalOpen(false);
+              setLinkedInModalContact(null);
+              setLinkedInModalStepData(null);
+            }}
+            onSuccess={() => {
+              // Handle LinkedIn touch logged - could refresh contact data here if needed
+            }}
+            instructions={linkedInModalStepData?.instructions || ""}
+            cadenceId={cadenceId}
+          />
+        </>
+      )}
     </div>
   );
 }

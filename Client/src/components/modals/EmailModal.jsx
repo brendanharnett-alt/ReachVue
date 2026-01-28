@@ -73,6 +73,7 @@ export default function EmailModal({
   initialSubject = "",
   initialBody = "",
   emailSettings = null,
+  cadenceId = null,
 }) {
   // #region agent log
   fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:68',message:'EmailModal component render',data:{hasEmailSettings:!!emailSettings,emailSettingsType:typeof emailSettings,autoSignature:emailSettings?.auto_signature,hasSignatureHtml:!!emailSettings?.email_signature_html,signatureHtmlLength:emailSettings?.email_signature_html?.length,open,hasContact:!!contact},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
@@ -267,6 +268,7 @@ export default function EmailModal({
         subject,
         body: bodyHtml, // Clean body stored in DB
         metadata: { to: recipient },
+        cadence_id: cadenceId,
         track_opens: trackOpens,
         track_clicks: trackClicks,
       })

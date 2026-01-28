@@ -101,6 +101,9 @@ export default function MultiActionModal({
   onSkipStep,
   onPostponeStep,
   onViewHistory,
+  onExecuteStep,
+  cadenceId,
+  cadenceStructure,
 }) {
   const [steps, setSteps] = useState([]);
   const [loadingSteps, setLoadingSteps] = useState(false);
@@ -184,12 +187,18 @@ export default function MultiActionModal({
                         <div className="flex items-center gap-2">
                           <button
                             className="h-6 w-6 rounded-full flex items-center justify-center border hover:bg-gray-100"
-                            onClick={() =>
-                              onCompleteStep?.(
-                                person.id,
-                                step.cadence_step_id
-                              )
-                            }
+                            onClick={() => {
+                              if (onExecuteStep) {
+                                // Open appropriate touch modal based on step type
+                                onExecuteStep(person, step);
+                              } else {
+                                // Fallback to original behavior
+                                onCompleteStep?.(
+                                  person.id,
+                                  step.cadence_step_id
+                                );
+                              }
+                            }}
                           >
                             <Play
                               className={`h-3 w-3 ${
