@@ -503,6 +503,8 @@ export default function CadenceDetailPage() {
           setEmailModalStepData({
             initialSubject: emailSubject,
             initialBody: emailBody,
+            cadenceStepId: currentStep.id,
+            contactCadenceId: person.id,
           });
           setEmailModalContact(contact);
           setEmailModalOpen(true);
@@ -520,6 +522,8 @@ export default function CadenceDetailPage() {
           
           setCallModalStepData({
             instructions: instructions,
+            cadenceStepId: currentStep.id,
+            contactCadenceId: person.id,
           });
           setCallModalContact(contact);
           setCallModalOpen(true);
@@ -537,6 +541,8 @@ export default function CadenceDetailPage() {
           
           setLinkedInModalStepData({
             instructions: instructions,
+            cadenceStepId: currentStep.id,
+            contactCadenceId: person.id,
           });
           setLinkedInModalContact(contact);
           setLinkedInModalOpen(true);
@@ -614,6 +620,8 @@ export default function CadenceDetailPage() {
       setEmailModalStepData({
         initialSubject: emailSubject,
         initialBody: emailBody,
+        cadenceStepId: cadenceStep.id,
+        contactCadenceId: person.id,
       });
       setEmailModalContact(contact);
       setEmailModalOpen(true);
@@ -626,6 +634,8 @@ export default function CadenceDetailPage() {
       
       setCallModalStepData({
         instructions: instructions,
+        cadenceStepId: cadenceStep.id,
+        contactCadenceId: person.id,
       });
       setCallModalContact(contact);
       setCallModalOpen(true);
@@ -638,6 +648,8 @@ export default function CadenceDetailPage() {
       
       setLinkedInModalStepData({
         instructions: instructions,
+        cadenceStepId: cadenceStep.id,
+        contactCadenceId: person.id,
       });
       setLinkedInModalContact(contact);
       setLinkedInModalOpen(true);
@@ -1853,6 +1865,14 @@ export default function CadenceDetailPage() {
             initialSubject={emailModalStepData?.initialSubject || ""}
             initialBody={emailModalStepData?.initialBody || ""}
             cadenceId={cadenceId}
+            onCompleteStep={
+              emailModalStepData?.cadenceStepId && emailModalStepData?.contactCadenceId
+                ? () => handleCompleteStep(
+                    emailModalStepData.contactCadenceId,
+                    emailModalStepData.cadenceStepId
+                  )
+                : null
+            }
           />
         </>
       )}
@@ -1879,6 +1899,14 @@ export default function CadenceDetailPage() {
             }}
             instructions={callModalStepData?.instructions || ""}
             cadenceId={cadenceId}
+            onCompleteStep={
+              callModalStepData?.cadenceStepId && callModalStepData?.contactCadenceId
+                ? () => handleCompleteStep(
+                    callModalStepData.contactCadenceId,
+                    callModalStepData.cadenceStepId
+                  )
+                : null
+            }
           />
         </>
       )}
@@ -1905,6 +1933,14 @@ export default function CadenceDetailPage() {
             }}
             instructions={linkedInModalStepData?.instructions || ""}
             cadenceId={cadenceId}
+            onCompleteStep={
+              linkedInModalStepData?.cadenceStepId && linkedInModalStepData?.contactCadenceId
+                ? () => handleCompleteStep(
+                    linkedInModalStepData.contactCadenceId,
+                    linkedInModalStepData.cadenceStepId
+                  )
+                : null
+            }
           />
         </>
       )}

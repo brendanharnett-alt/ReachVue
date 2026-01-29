@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 
-export default function CadenceLinkedInModal({ isOpen, contact, onClose, onSuccess, instructions, cadenceId }) {
+export default function CadenceLinkedInModal({ isOpen, contact, onClose, onSuccess, instructions, cadenceId, onCompleteStep = null }) {
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -41,6 +41,16 @@ export default function CadenceLinkedInModal({ isOpen, contact, onClose, onSucce
 
       if (!res.ok) {
         throw new Error(await res.text())
+      }
+
+      // 🔹 Complete step immediately after touch is logged (if callback provided)
+      if (onCompleteStep) {
+        try {
+          await onCompleteStep()
+        } catch (err) {
+          console.error('Failed to complete step:', err)
+          // Don't block - touch was logged successfully
+        }
       }
 
       if (onSuccess) onSuccess()

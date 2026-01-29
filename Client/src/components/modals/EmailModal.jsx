@@ -74,6 +74,7 @@ export default function EmailModal({
   initialBody = "",
   emailSettings = null,
   cadenceId = null,
+  onCompleteStep = null,
 }) {
   // #region agent log
   fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:68',message:'EmailModal component render',data:{hasEmailSettings:!!emailSettings,emailSettingsType:typeof emailSettings,autoSignature:emailSettings?.auto_signature,hasSignatureHtml:!!emailSettings?.email_signature_html,signatureHtmlLength:emailSettings?.email_signature_html?.length,open,hasContact:!!contact},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
@@ -272,6 +273,16 @@ export default function EmailModal({
         track_opens: trackOpens,
         track_clicks: trackClicks,
       })
+
+      // 🔹 Complete step immediately after touch is logged (if callback provided)
+      if (onCompleteStep) {
+        try {
+          await onCompleteStep()
+        } catch (err) {
+          console.error('Failed to complete step:', err)
+          // Don't block - touch was logged successfully
+        }
+      }
 
       // #region agent log
       fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:183',message:'After logTouch call',data:{hasTouchResult:!!touchResult,hasEmailId:!!touchResult?.email_id,hasTracking:!!touchResult?.tracking,hasSignature:!!touchResult?.tracking?.signature,touchResultKeys:Object.keys(touchResult||{}),trackingKeys:touchResult?.tracking?Object.keys(touchResult.tracking):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
