@@ -167,25 +167,25 @@ export default function EmailModal({
       fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:130',message:'Before signature check',data:{contentLength:content.length,hasEmailSettings:!!effectiveEmailSettings,autoSignature:effectiveEmailSettings?.auto_signature,hasSignatureHtml:!!effectiveEmailSettings?.email_signature_html,signatureHtmlPreview:effectiveEmailSettings?.email_signature_html?.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
       // #endregion
       
-      // Prepend signature at the TOP if auto_signature is enabled and signature exists
+      // Append signature at the BOTTOM if auto_signature is enabled and signature exists
       if (effectiveEmailSettings?.auto_signature && effectiveEmailSettings?.email_signature_html) {
         const signatureHtml = effectiveEmailSettings.email_signature_html.trim()
         // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:135',message:'Signature condition met',data:{signatureHtmlLength:signatureHtml.length,contentBeforePrepend:content.substring(0,50),willPrepend:!!signatureHtml},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:135',message:'Signature condition met',data:{signatureHtmlLength:signatureHtml.length,contentBeforeAppend:content.substring(0,50),willAppend:!!signatureHtml},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
         // #endregion
         if (signatureHtml) {
           // If content is empty, just use signature
-          // Otherwise, prepend signature at the top (before existing content)
+          // Otherwise, append signature at the bottom (after existing content)
           if (!content || content === "<p></p>" || content === "<p><br></p>") {
             content = signatureHtml
             // #region agent log
             fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:140',message:'Content was empty, using signature only',data:{finalContentLength:content.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
             // #endregion
           } else {
-            // Prepend signature at the top (before existing content)
-            content = signatureHtml + content
+            // Append signature at the bottom (after existing content)
+            content = content + signatureHtml
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:144',message:'Prepended signature at top of existing content',data:{finalContentLength:content.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:144',message:'Appended signature at bottom of existing content',data:{finalContentLength:content.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
             // #endregion
           }
         }

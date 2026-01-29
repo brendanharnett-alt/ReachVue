@@ -132,7 +132,7 @@ export default function CadenceStepEmailModal({
     }
   }, [open, editor])
 
-  // Prefill subject + body with signature if auto_signature is enabled
+  // Prefill subject + body (empty for cadence step creation - signature will be added during execution)
   useEffect(() => {
     if (!open || !editor) return
 
@@ -141,19 +141,10 @@ export default function CadenceStepEmailModal({
         subjectRef.current.value = ""
       }
 
-      let content = ""
-
-      // Prepend signature at the TOP if auto_signature is enabled and signature exists
-      if (effectiveEmailSettings?.auto_signature && effectiveEmailSettings?.email_signature_html) {
-        const signatureHtml = effectiveEmailSettings.email_signature_html.trim()
-        if (signatureHtml) {
-          content = signatureHtml
-        }
-      }
-
-      editor.commands.setContent(content, false)
+      // Start with empty content - signature will be added when the step is executed, not during creation
+      editor.commands.setContent("", false)
     })
-  }, [open, editor, effectiveEmailSettings])
+  }, [open, editor])
 
   const handleAddStep = async () => {
     const subject = subjectRef.current?.value || ""
