@@ -1466,6 +1466,70 @@ app.get('/cadences/:cadenceId/contacts', async (req, res) => {
   }
 });
 
+// Get all contacts who have been in a cadence (including historical)
+app.get('/cadences/:cadenceId/contacts/all', async (req, res) => {
+  const { cadenceId } = req.params;
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Server/index.js:1470',message:'GET /cadences/:cadenceId/contacts/all entry',data:{cadenceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'K'})}).catch(()=>{});
+  // #endregion
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        cc.id AS contact_cadence_id,
+        c.id AS contact_id,
+        c.first_name,
+        c.last_name,
+        c.company,
+        cc.ended_at,
+        CASE 
+          WHEN cc.ended_at IS NULL THEN true
+          ELSE false
+        END AS is_active
+      FROM contact_cadences cc
+      JOIN contacts c
+        ON c.id = cc.contact_id
+      WHERE cc.cadence_id = $1
+      ORDER BY c.last_name, c.first_name
+      `,
+      [cadenceId]
+    );
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Server/index.js:1496',message:'Query result for all cadence contacts',data:{rowCount:result.rows.length,firstFewRows:result.rows.slice(0,3).map(r => ({contact_cadence_id:r.contact_cadence_id,contact_id:r.contact_id,is_active:r.is_active}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'K'})}).catch(()=>{});
+    // #endregion
+
+    res.json(result.rows);
+  } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Server/index.js:1498',message:'Error fetching all cadence contacts',data:{error:err.message,cadenceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'K'})}).catch(()=>{});
+    // #endregion
+    console.error('Error fetching all cadence contacts:', err);
+    res.status(500).send('Failed to fetch all cadence contacts');
+  }
+});
+
+// Get touches for a specific contact within a specific cadence
+app.get('/cadences/:cadenceId/contacts/:contactId/touches', async (req, res) => {
+  const { cadenceId, contactId } = req.params;
+  try {
+    const result = await pool.query(
+      `
+      SELECT t.*
+      FROM touches t
+      WHERE t.cadence_id = $1 AND t.contact_id = $2
+      ORDER BY t.touched_at DESC
+      `,
+      [cadenceId, contactId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching touches by contact and cadence:', err);
+    res.status(500).send('Failed to fetch touches');
+  }
+});
 
 app.get('/cadences/:cadenceId/steps', async (req, res) => {
   const { cadenceId } = req.params;

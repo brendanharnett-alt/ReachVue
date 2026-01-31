@@ -37,7 +37,9 @@ import CadenceStepEmailModal from "@/components/modals/CadenceStepEmailModal";
 import EmailModal from "@/components/modals/EmailModal";
 import CadenceCallModal from "@/components/modals/CadenceCallModal";
 import CadenceLinkedInModal from "@/components/modals/CadenceLinkedInModal";
-import { fetchCadenceSteps, createCadenceStep, deleteCadenceStep, fetchCadenceContacts, addContactToCadence, fetchContacts, removeContactFromCadence, skipCadenceStep, completeCadenceStep, postponeCadenceStep, fetchCadenceById } from "@/api";
+import { fetchCadenceSteps, createCadenceStep, deleteCadenceStep, fetchCadenceContacts, fetchAllCadenceContacts, fetchTouchesByContactAndCadence, fetchCadenceHistoryByContactAndCadence, addContactToCadence, fetchContacts, removeContactFromCadence, skipCadenceStep, completeCadenceStep, postponeCadenceStep, fetchCadenceById } from "@/api";
+
+const BASE_URL = "http://localhost:3000";
 
 // Generate mock data with dates relative to today
 const generateMockPeople = () => {
@@ -226,6 +228,9 @@ export default function CadenceDetailPage() {
   const [cadenceName, setCadenceName] = useState("Loading...");
   const [peopleInCadence, setPeopleInCadence] = useState([]);
   const [loadingContacts, setLoadingContacts] = useState(true);
+  const [historyData, setHistoryData] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [historyFilter, setHistoryFilter] = useState("all"); // "all" | "in_cadence" | "not_in_cadence"
   const [multiActionModalOpen, setMultiActionModalOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [selectedContact, setSelectedContact] = useState(null);
@@ -363,6 +368,156 @@ export default function CadenceDetailPage() {
       loadContacts();
     }
   }, [cadenceId, cadenceStructure, loadingSteps]);
+
+  // Fetch history data when history tab is active
+  useEffect(() => {
+    const loadHistoryData = async () => {
+      if (activeTab !== "history" || !cadenceId) return;
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:375',message:'loadHistoryData started',data:{activeTab,cadenceId},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'I'})}).catch(()=>{});
+      // #endregion
+      
+      setLoadingHistory(true);
+      try {
+        // Fetch all contacts who have been in the cadence (including historical)
+        // Also fetch all contacts for full contact details
+        const [allCadenceContacts, allContacts] = await Promise.all([
+          fetchAllCadenceContacts(cadenceId),
+          fetchContacts(),
+        ]);
+        
+        // Create contact map for quick lookup
+        const contactMap = new Map(allContacts.map(c => [c.id, c]));
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:381',message:'fetchAllCadenceContacts result',data:{count:allCadenceContacts.length,contacts:allCadenceContacts.map(cc => ({contact_id:cc.contact_id,is_active:cc.is_active}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'I'})}).catch(()=>{});
+        // #endregion
+        
+        // Get all unique contact IDs
+        const allContactIds = [...new Set(allCadenceContacts.map(cc => cc.contact_id))];
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:386',message:'Unique contact IDs extracted',data:{allContactIdsCount:allContactIds.length,allContactIds},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'I'})}).catch(()=>{});
+        // #endregion
+        
+        // Create a map of active contact IDs for status checking
+        const activeContactIds = new Set(
+          allCadenceContacts.filter(cc => cc.is_active).map(cc => cc.contact_id)
+        );
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:392',message:'Active contact IDs',data:{activeContactIdsCount:activeContactIds.size,activeContactIds:Array.from(activeContactIds)},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'I'})}).catch(()=>{});
+        // #endregion
+        
+        // For each contact, fetch their touches to find the last step action
+        const historyPromises = allContactIds.map(async (contactId) => {
+          const cadenceContact = allCadenceContacts.find(cc => cc.contact_id === contactId);
+          if (!cadenceContact) return null;
+          
+          try {
+            // Fetch cadence history for this contact (same API as the modal uses)
+            const historyData = await fetchCadenceHistoryByContactAndCadence(cadenceId, contactId, 0, 1);
+            const events = historyData.items || historyData.events || [];
+            const topEvent = events.length > 0 ? events[0] : null;
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:419',message:'History fetched for contact',data:{contactId,cadenceId,eventsCount:events.length,topEventType:topEvent?.event_type,topEventDayNumber:topEvent?.day_number,topEventStepLabel:topEvent?.step_label},timestamp:Date.now(),sessionId:'debug-session',runId:'run5',hypothesisId:'N'})}).catch(()=>{});
+            // #endregion
+            
+            // Determine status based on is_active
+            const isInCadence = activeContactIds.has(contactId);
+            
+            // Format last step action using the same logic as the modal
+            // Use getEventLabel and formatSecondaryText logic from the modal
+            let lastStepAction = "—";
+            let lastStepCompletedAt = null;
+            
+            if (topEvent) {
+              lastStepCompletedAt = topEvent.event_at;
+              
+              // Format based on event_type (same as modal's getEventLabel)
+              if (topEvent.event_type === 'cadence_completed') {
+                lastStepAction = "Cadence Completed";
+              } else if (topEvent.event_type === 'completed') {
+                // Format as "Step Completed: Day N: Step Name" (same as modal's formatSecondaryText)
+                if (topEvent.day_number !== null && topEvent.day_number !== undefined && topEvent.step_label) {
+                  lastStepAction = `Step Completed: Day ${topEvent.day_number}: ${topEvent.step_label}`;
+                } else if (topEvent.step_label) {
+                  lastStepAction = `Step Completed: ${topEvent.step_label}`;
+                } else {
+                  lastStepAction = "Step Completed";
+                }
+              } else if (topEvent.event_type === 'skipped') {
+                // Format as "Step Skipped: Day N: Step Name" (same format as completed)
+                if (topEvent.day_number !== null && topEvent.day_number !== undefined && topEvent.step_label) {
+                  lastStepAction = `Step Skipped: Day ${topEvent.day_number}: ${topEvent.step_label}`;
+                } else if (topEvent.step_label) {
+                  lastStepAction = `Step Skipped: ${topEvent.step_label}`;
+                } else {
+                  lastStepAction = "Step Skipped";
+                }
+              } else {
+                // For other event types, just show the event type
+                lastStepAction = topEvent.event_type.charAt(0).toUpperCase() + topEvent.event_type.slice(1);
+              }
+            }
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:452',message:'History item created',data:{contactId,lastStepAction,lastStepCompletedAt,status:isInCadence ? "in_cadence" : "not_in_cadence"},timestamp:Date.now(),sessionId:'debug-session',runId:'run5',hypothesisId:'N'})}).catch(()=>{});
+            // #endregion
+            
+            // Get full contact details
+            const fullContact = contactMap.get(contactId) || {};
+            
+            return {
+              contactId: cadenceContact.contact_id,
+              company: cadenceContact.company || "—",
+              firstName: cadenceContact.first_name || "",
+              lastName: cadenceContact.last_name || "",
+              lastStepAction: lastStepAction,
+              lastStepCompletedAt: lastStepCompletedAt,
+              status: isInCadence ? "in_cadence" : "not_in_cadence",
+              contactCadenceId: cadenceContact.contact_cadence_id, // Store for modal
+              fullContact: fullContact, // Store full contact for modal
+            };
+          } catch (err) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:443',message:'Error fetching touches for contact',data:{contactId,error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'J'})}).catch(()=>{});
+            // #endregion
+            console.error(`Failed to fetch touches for contact ${contactId}:`, err);
+            return {
+              contactId: cadenceContact.contact_id,
+              company: cadenceContact.company || "—",
+              firstName: cadenceContact.first_name || "",
+              lastName: cadenceContact.last_name || "",
+              lastStepAction: "—",
+              lastStepCompletedAt: null,
+              status: activeContactIds.has(contactId) ? "in_cadence" : "not_in_cadence",
+            };
+          }
+        });
+        
+        const history = (await Promise.all(historyPromises)).filter(Boolean);
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:456',message:'History data processed',data:{historyCount:history.length,historyItems:history.map(h => ({contactId:h.contactId,status:h.status,lastStepAction:h.lastStepAction}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'I'})}).catch(()=>{});
+        // #endregion
+        
+        setHistoryData(history);
+      } catch (err) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:461',message:'Failed to load history data',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'I'})}).catch(()=>{});
+        // #endregion
+        console.error("Failed to load history data:", err);
+        setHistoryData([]);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+    
+    loadHistoryData();
+  }, [activeTab, cadenceId, cadenceStructure]);
 
   // Get real actions for multi-action steps from cadence structure
   const getMultiActions = (person) => {
@@ -1298,6 +1453,19 @@ export default function CadenceDetailPage() {
         >
           Cadence Structure
         </button>
+        <button
+          onClick={() => {
+            setActiveTab("history");
+            navigate(`/cadences/${cadenceId}?tab=history`, { replace: true });
+          }}
+          className={`pb-2 px-1 text-sm font-medium transition-colors ${
+            activeTab === "history"
+              ? "text-blue-600 border-b-2 border-blue-600"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          History
+        </button>
       </div>
 
       {/* People Tab Content */}
@@ -1608,6 +1776,152 @@ export default function CadenceDetailPage() {
           />
         )}
       </div>
+      )}
+
+      {/* History Tab Content */}
+      {activeTab === "history" && (
+        <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
+          {/* Filter */}
+          <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-start gap-4">
+            <span className="text-sm font-medium text-gray-700">Filter:</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  {historyFilter === "all" ? "All" : historyFilter === "in_cadence" ? "In Cadence" : "Not in Cadence"}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => setHistoryFilter("all")}>
+                  All
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setHistoryFilter("in_cadence")}>
+                  In Cadence
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setHistoryFilter("not_in_cadence")}>
+                  Not in Cadence
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          
+          <div className="overflow-x-auto">
+            {loadingHistory ? (
+              <div className="p-8 text-center text-gray-500">
+                Loading history...
+              </div>
+            ) : (
+              <table className="w-full text-sm text-left text-gray-700">
+                <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium">Company</th>
+                    <th className="px-4 py-3 text-left font-medium">Full Name</th>
+                    <th className="px-4 py-3 text-left font-medium">Last Step Action</th>
+                    <th className="px-4 py-3 text-left font-medium">Date of Last Step Completion</th>
+                    <th className="px-4 py-3 text-left font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyData
+                    .filter(item => {
+                      if (historyFilter === "all") return true;
+                      return item.status === historyFilter;
+                    })
+                    .map((item) => (
+                      <tr
+                        key={item.contactId}
+                        className="border-b hover:bg-gray-50 transition"
+                      >
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          {item.company}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">
+                          <button
+                            onClick={() => {
+                              // First try to find the person in peopleInCadence (if they're currently active)
+                              const person = peopleInCadence.find(
+                                p => p.contactId === item.contactId || p.id === item.contactCadenceId
+                              );
+                              
+                              if (person) {
+                                // Use the existing person object from peopleInCadence
+                                setTimelineContact(person);
+                                setTimelineModalOpen(true);
+                              } else {
+                                // Create a person object that matches the structure expected by the modal
+                                const fullContact = item.fullContact || {};
+                                const contactForModal = {
+                                  id: item.contactCadenceId || item.contactId, // Use contactCadenceId as id
+                                  contactId: item.contactId,
+                                  company: item.company || fullContact.company || "—",
+                                  firstName: item.firstName,
+                                  lastName: item.lastName,
+                                  first_name: item.firstName,
+                                  last_name: item.lastName,
+                                  email: fullContact.email || null,
+                                  title: fullContact.title || null,
+                                  mobile_phone: fullContact.mobile_phone || null,
+                                  phone: fullContact.mobile_phone || null,
+                                  linkedin_url: fullContact.linkedin_url || null,
+                                  tags: fullContact.tags || [],
+                                  currentStep: "Unknown",
+                                  currentStepOrder: null,
+                                  dayNumber: null,
+                                  stepInfo: {
+                                    isMultiStep: false,
+                                    stepType: "task",
+                                    remainingSteps: null,
+                                    stepName: null,
+                                    dayNumber: null,
+                                    overallStepNumber: null,
+                                  },
+                                  dueOn: null,
+                                  lastStepCompletedAt: item.lastStepCompletedAt,
+                                };
+                                setTimelineContact(contactForModal);
+                                setTimelineModalOpen(true);
+                              }
+                            }}
+                            className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                          >
+                            {item.firstName} {item.lastName}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          {item.lastStepAction}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          {item.lastStepCompletedAt
+                            ? formatDateWithOrdinal(item.lastStepCompletedAt.split("T")[0])
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                              item.status === "in_cadence"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}
+                          >
+                            {item.status === "in_cadence" ? "In Cadence" : "Not in Cadence"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  {historyData.filter(item => {
+                    if (historyFilter === "all") return true;
+                    return item.status === historyFilter;
+                  }).length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                        No history data found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Cadence Structure Tab Content */}

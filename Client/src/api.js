@@ -257,6 +257,28 @@ export async function fetchCadenceContacts(cadenceId) {
   }
 }
 
+export async function fetchAllCadenceContacts(cadenceId) {
+  try {
+    const res = await fetch(`${BASE_URL}/cadences/${cadenceId}/contacts/all`)
+    if (!res.ok) throw new Error("Failed to fetch all cadence contacts")
+    return await res.json()
+  } catch (err) {
+    console.error("Fetch all cadence contacts error:", err)
+    return []
+  }
+}
+
+export async function fetchTouchesByContactAndCadence(cadenceId, contactId) {
+  try {
+    const res = await fetch(`${BASE_URL}/cadences/${cadenceId}/contacts/${contactId}/touches`)
+    if (!res.ok) throw new Error("Failed to fetch touches by contact and cadence")
+    return await res.json()
+  } catch (err) {
+    console.error("Fetch touches by contact and cadence error:", err)
+    return []
+  }
+}
+
 export async function addContactToCadence(cadenceId, contactId) {
   try {
     const res = await fetch(`${BASE_URL}/cadences/${cadenceId}/contacts`, {
