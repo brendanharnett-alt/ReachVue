@@ -17,7 +17,7 @@ import CadenceActivityTimelineModal from "@/components/modals/CadenceActivityTim
 import EmailModal from "@/components/modals/EmailModal";
 import CadenceCallModal from "@/components/modals/CadenceCallModal";
 import CadenceLinkedInModal from "@/components/modals/CadenceLinkedInModal";
-import { fetchCadences, createCadence, deleteCadence, fetchCadenceContacts, fetchCadenceSteps, fetchContacts, skipCadenceStep, postponeCadenceStep, completeCadenceStep, fetchContactCadenceSteps } from "@/api";
+import { fetchCadences, createCadence, deleteCadence, fetchCadenceContacts, fetchCadenceSteps, fetchContacts, skipCadenceStep, postponeCadenceStep, completeCadenceStep, fetchContactCadenceSteps, fetchTouchesByContactAndCadence } from "@/api";
 
 // Check if date is past due
 function isPastDue(dateString) {
@@ -584,8 +584,49 @@ export default function CadencesPage() {
         
         // Open appropriate modal based on action_type
         if (actionType === 'email') {
-          const emailSubject = actionValue?.email_subject || '';
-          const emailBody = actionValue?.email_body || '';
+          let emailSubject = actionValue?.email_subject || '';
+          let emailBody = actionValue?.email_body || '';
+          
+          // Check if thread is specified and fetch threaded content
+          if (actionValue?.thread) {
+            try {
+              const touches = await fetchTouchesByContactAndCadence(person.cadenceId, contact.id);
+              const threadedTouch = touches.find(t => t.cadence_step_id === actionValue.thread);
+              
+              if (threadedTouch) {
+                // Build threaded content similar to buildReplyBody
+                const previousBody = threadedTouch.body || "";
+                const sentDate = new Date(threadedTouch.touched_at).toLocaleString("en-US", {
+                  dateStyle: "long",
+                  timeStyle: "short",
+                });
+                const from = threadedTouch.from || contact.email || "";
+                const to = threadedTouch.to || "";
+                const subject = threadedTouch.subject || "";
+
+                const threadedContent = `
+<p><br><br></p>
+<hr style="border: none; border-top: 1px solid #bfbfbf; margin: 8px 0;" />
+<div style="font-family: Segoe UI, Arial, sans-serif; font-size: 12px; color: #333;">
+  <p style="margin: 0;">
+    <b>From:</b> ${from}<br>
+    <b>Sent:</b> ${sentDate}<br>
+    <b>To:</b> ${to}<br>
+    <b>Subject:</b> ${subject}
+  </p>
+  <div style="margin-top: 8px;">
+    ${previousBody}
+  </div>
+</div>`;
+                
+                // Append threaded content to email body
+                emailBody = emailBody + threadedContent;
+              }
+            } catch (err) {
+              console.error("Failed to fetch threaded content:", err);
+              // Continue without threaded content if fetch fails
+            }
+          }
           
           setEmailModalStepData({
             initialSubject: emailSubject,
@@ -630,7 +671,7 @@ export default function CadencesPage() {
     }
   };
 
-  const handleExecuteStepFromMultiAction = (person, step) => {
+  const handleExecuteStepFromMultiAction = async (person, step) => {
     // Close MultiActionModal
     setMultiActionModalOpen(false);
     
@@ -666,8 +707,49 @@ export default function CadencesPage() {
     
     // Open appropriate modal based on action_type
     if (actionType === 'email') {
-      const emailSubject = actionValue?.email_subject || '';
-      const emailBody = actionValue?.email_body || '';
+      let emailSubject = actionValue?.email_subject || '';
+      let emailBody = actionValue?.email_body || '';
+      
+      // Check if thread is specified and fetch threaded content
+      if (actionValue?.thread) {
+        try {
+          const touches = await fetchTouchesByContactAndCadence(person.cadenceId, contact.id);
+          const threadedTouch = touches.find(t => t.cadence_step_id === actionValue.thread);
+          
+          if (threadedTouch) {
+            // Build threaded content similar to buildReplyBody
+            const previousBody = threadedTouch.body || "";
+            const sentDate = new Date(threadedTouch.touched_at).toLocaleString("en-US", {
+              dateStyle: "long",
+              timeStyle: "short",
+            });
+            const from = threadedTouch.from || contact.email || "";
+            const to = threadedTouch.to || "";
+            const subject = threadedTouch.subject || "";
+
+            const threadedContent = `
+<p><br><br></p>
+<hr style="border: none; border-top: 1px solid #bfbfbf; margin: 8px 0;" />
+<div style="font-family: Segoe UI, Arial, sans-serif; font-size: 12px; color: #333;">
+  <p style="margin: 0;">
+    <b>From:</b> ${from}<br>
+    <b>Sent:</b> ${sentDate}<br>
+    <b>To:</b> ${to}<br>
+    <b>Subject:</b> ${subject}
+  </p>
+  <div style="margin-top: 8px;">
+    ${previousBody}
+  </div>
+</div>`;
+            
+            // Append threaded content to email body
+            emailBody = emailBody + threadedContent;
+          }
+        } catch (err) {
+          console.error("Failed to fetch threaded content:", err);
+          // Continue without threaded content if fetch fails
+        }
+      }
       
       setEmailModalStepData({
         initialSubject: emailSubject,
@@ -1231,6 +1313,7 @@ export default function CadencesPage() {
         initialSubject={emailModalStepData?.initialSubject || ""}
         initialBody={emailModalStepData?.initialBody || ""}
         cadenceId={emailModalContact ? toDoItems.find(p => p.contactId === emailModalContact.id)?.cadenceId : null}
+        cadenceStepId={emailModalStepData?.cadenceStepId || null}
         onCompleteStep={
           emailModalStepData?.cadenceStepId && emailModalStepData?.contactCadenceId
             ? () => handleCompleteStep(
@@ -1293,6 +1376,7 @@ export default function CadencesPage() {
           contact={linkedInModalContact}
           instructions={linkedInModalStepData?.instructions || ""}
           cadenceId={linkedInModalContact ? toDoItems.find(p => p.contactId === linkedInModalContact.id)?.cadenceId : null}
+          cadenceStepId={linkedInModalStepData?.cadenceStepId || null}
           onSuccess={() => {
             // #region agent log
             fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:1268',message:'LinkedIn modal onSuccess called',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});

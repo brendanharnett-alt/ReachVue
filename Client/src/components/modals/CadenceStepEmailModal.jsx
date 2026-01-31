@@ -80,11 +80,59 @@ export default function CadenceStepEmailModal({
   initialSubject = "",
   initialBody = "",
   initialThread = "",
+  cadenceStructure = [],
+  currentStepId = null,
+  currentDayNumber = 0,
+  currentStepOrder = null,
 }) {
   const subjectRef = useRef(null)
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [thread, setThread] = useState("")
+  const [thread, setThread] = useState("none")
   const [localEmailSettings, setLocalEmailSettings] = useState(emailSettings)
+
+  // Get earlier email steps for thread dropdown
+  const getEarlierEmailSteps = () => {
+    if (!cadenceStructure || cadenceStructure.length === 0) return [];
+
+    // Flatten all steps from cadence structure
+    const allSteps = [];
+    cadenceStructure.forEach((day) => {
+      day.actions.forEach((action) => {
+        if (action.type === 'email' && action.id) {
+          allSteps.push({
+            id: action.id,
+            day_number: day.day,
+            step_order: action.step_order || 0,
+            step_label: action.label || '',
+          });
+        }
+      });
+    });
+
+    // Filter to earlier steps: (day_number < currentDayNumber) OR (day_number === currentDayNumber AND step_order < currentStepOrder)
+    const earlierSteps = allSteps.filter((step) => {
+      if (step.id === currentStepId) return false; // Exclude current step
+      if (step.day_number < currentDayNumber) return true;
+      if (step.day_number === currentDayNumber && currentStepOrder !== null && step.step_order < currentStepOrder) return true;
+      return false;
+    });
+
+    // Sort by (day_number ASC, step_order ASC)
+    earlierSteps.sort((a, b) => {
+      if (a.day_number !== b.day_number) {
+        return a.day_number - b.day_number;
+      }
+      return a.step_order - b.step_order;
+    });
+
+    // Format as "Day #: Step #: Step Name"
+    return earlierSteps.map((step) => ({
+      value: step.id,
+      label: `Day ${step.day_number}: Step ${step.step_order}: ${step.step_label}`,
+    }));
+  };
+
+  const threadOptions = getEarlierEmailSteps();
 
   // Fetch email settings if not provided as prop
   useEffect(() => {
@@ -137,7 +185,7 @@ export default function CadenceStepEmailModal({
     if (!open && editor) {
       editor.commands.setContent("")
       if (subjectRef.current) subjectRef.current.value = ""
-      setThread("")
+      setThread("none")
       // Cleanup overlays when modal closes
       setTimeout(() => {
         const overlays = document.querySelectorAll('[data-radix-dialog-overlay]');
@@ -175,7 +223,7 @@ export default function CadenceStepEmailModal({
       if (subjectRef.current) {
         subjectRef.current.value = initialSubject || ""
       }
-      setThread(initialThread || "")
+      setThread(initialThread && initialThread !== "none" ? initialThread : "none")
 
       // Pre-populate body if editing, otherwise start empty
       if (initialBody) {
@@ -205,7 +253,7 @@ export default function CadenceStepEmailModal({
         ...stepData,
         email_subject: subject,
         email_body: bodyHtml,
-        thread: thread || null,
+        thread: thread && thread !== "none" ? thread : null,
       }
       
       console.log('CadenceStepEmailModal handleAddStep - combinedData:', combinedData);
@@ -290,12 +338,17 @@ export default function CadenceStepEmailModal({
               <label className="text-xs font-medium text-gray-700 mb-0.5 block">
                 Thread
               </label>
-              <Select value={thread} onValueChange={setThread}>
+              <Select value={thread || "none"} onValueChange={setThread}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select thread" />
                 </SelectTrigger>
                 <SelectContent>
-                  {/* Empty for now - placeholder */}
+                  <SelectItem value="none">None</SelectItem>
+                  {threadOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

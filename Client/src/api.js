@@ -91,6 +91,7 @@ export async function logTouch({
   cadence_id = null,
   track_opens = false,
   track_clicks = false,
+  cadence_step_id = null,
 }) {
   try {
     const touchPayload = {
@@ -103,6 +104,7 @@ export async function logTouch({
       cadence_id,
       track_opens,
       track_clicks,
+      cadence_step_id,
     }
 
     const res = await fetch(`${BASE_URL}/touches`, {

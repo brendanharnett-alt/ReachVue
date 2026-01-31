@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 
-export default function CadenceCallModal({ isOpen, contact, onClose, onSuccess, instructions, cadenceId, onCompleteStep = null }) {
+export default function CadenceCallModal({ isOpen, contact, onClose, onSuccess, instructions, cadenceId, cadenceStepId = null, onCompleteStep = null }) {
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -31,6 +31,7 @@ export default function CadenceCallModal({ isOpen, contact, onClose, onSuccess, 
         body: notes.trim(),
         metadata: null,
         cadence_id: cadenceId || null,
+        cadence_step_id: cadenceStepId || null,
       }
 
       const res = await fetch("http://localhost:3000/touches", {

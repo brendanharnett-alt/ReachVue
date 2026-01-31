@@ -74,6 +74,7 @@ export default function EmailModal({
   initialBody = "",
   emailSettings = null,
   cadenceId = null,
+  cadenceStepId = null,
   onCompleteStep = null,
 }) {
   // #region agent log
@@ -298,6 +299,7 @@ export default function EmailModal({
         body: bodyHtml, // Clean body stored in DB
         metadata: { to: recipient },
         cadence_id: cadenceId,
+        cadence_step_id: cadenceStepId,
         track_opens: trackOpens,
         track_clicks: trackClicks,
       })

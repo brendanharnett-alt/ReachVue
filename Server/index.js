@@ -378,7 +378,7 @@ app.post('/send-email', async (req, res) => {
 // ----------------------
 
 app.post('/touches', async (req, res) => {
-  const { contact_id, touched_at, touch_type, subject, body, metadata, cadence_id, thread_id, parent_touch_id, track_opens, track_clicks } = req.body;
+  const { contact_id, touched_at, touch_type, subject, body, metadata, cadence_id, thread_id, parent_touch_id, track_opens, track_clicks, cadence_step_id } = req.body;
 
   // #region agent log
   const fs = require('fs');
@@ -392,11 +392,22 @@ app.post('/touches', async (req, res) => {
   }
 
   try {
+    // First, ensure cadence_step_id column exists (migration)
+    try {
+      await pool.query(`
+        ALTER TABLE touches 
+        ADD COLUMN IF NOT EXISTS cadence_step_id UUID REFERENCES cadence_steps(id)
+      `);
+    } catch (migrationErr) {
+      // Column might already exist, ignore error
+      console.log('cadence_step_id column check:', migrationErr.message);
+    }
+
     const result = await pool.query(
       `
       INSERT INTO touches
-      (contact_id, touched_at, touch_type, subject, body, metadata, created_at, cadence_id, thread_id, parent_touch_id)
-      VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9)
+      (contact_id, touched_at, touch_type, subject, body, metadata, created_at, cadence_id, thread_id, parent_touch_id, cadence_step_id)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9, $10)
       RETURNING *
       `,
       [
@@ -408,7 +419,8 @@ app.post('/touches', async (req, res) => {
         metadata || null,
         cadence_id || null,
         thread_id || null,
-        parent_touch_id || null
+        parent_touch_id || null,
+        cadence_step_id || null
       ]
     );
 

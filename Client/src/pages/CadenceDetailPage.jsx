@@ -711,8 +711,76 @@ export default function CadenceDetailPage() {
           // #endregion
           
           // Extract email data from action_value
-          const emailSubject = actionValue?.email_subject || '';
-          const emailBody = actionValue?.email_body || '';
+          let emailSubject = actionValue?.email_subject || '';
+          let emailBody = actionValue?.email_body || '';
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:717',message:'Checking for thread in actionValue',data:{hasActionValue:!!actionValue,threadValue:actionValue?.thread,threadType:typeof actionValue?.thread,threadIsTruthy:!!actionValue?.thread},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+          
+          // Check if thread is specified and fetch threaded content
+          if (actionValue?.thread) {
+            try {
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:720',message:'Fetching touches for threading',data:{cadenceId,contactId:contact.id,threadValue:actionValue.thread},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+              // #endregion
+              const touches = await fetchTouchesByContactAndCadence(cadenceId, contact.id);
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:722',message:'Touches fetched for threading',data:{touchesCount:touches.length,touches:touches.map(t=>({id:t.id,cadence_step_id:t.cadence_step_id,touch_type:t.touch_type,subject:t.subject})),threadValue:actionValue.thread},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+              // #endregion
+              const threadedTouch = touches.find(t => t.cadence_step_id === actionValue.thread);
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:723',message:'Threaded touch lookup result',data:{hasThreadedTouch:!!threadedTouch,threadedTouchId:threadedTouch?.id,threadedTouchCadenceStepId:threadedTouch?.cadence_step_id,threadedTouchBodyLength:threadedTouch?.body?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+              // #endregion
+              
+              if (threadedTouch) {
+                // Build threaded content similar to buildReplyBody
+                const previousBody = threadedTouch.body || "";
+                const sentDate = new Date(threadedTouch.touched_at).toLocaleString("en-US", {
+                  dateStyle: "long",
+                  timeStyle: "short",
+                });
+                const from = threadedTouch.from || contact.email || "";
+                const to = threadedTouch.to || "";
+                const subject = threadedTouch.subject || "";
+
+                const threadedContent = `
+<p><br><br></p>
+<hr style="border: none; border-top: 1px solid #bfbfbf; margin: 8px 0;" />
+<div style="font-family: Segoe UI, Arial, sans-serif; font-size: 12px; color: #333;">
+  <p style="margin: 0;">
+    <b>From:</b> ${from}<br>
+    <b>Sent:</b> ${sentDate}<br>
+    <b>To:</b> ${to}<br>
+    <b>Subject:</b> ${subject}
+  </p>
+  <div style="margin-top: 8px;">
+    ${previousBody}
+  </div>
+</div>`;
+                
+                // Append threaded content to email body
+                emailBody = emailBody + threadedContent;
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:751',message:'Threaded content appended',data:{emailBodyLength:emailBody.length,threadedContentLength:threadedContent.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                // #endregion
+              } else {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:753',message:'Threaded touch not found',data:{threadValue:actionValue.thread,touchesCount:touches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+                // #endregion
+              }
+            } catch (err) {
+              console.error("Failed to fetch threaded content:", err);
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:757',message:'Error fetching threaded content',data:{error:err.message,errorStack:err.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+              // #endregion
+              // Continue without threaded content if fetch fails
+            }
+          } else {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:763',message:'No thread specified in actionValue',data:{hasActionValue:!!actionValue,threadValue:actionValue?.thread},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+            // #endregion
+          }
           
           setEmailModalStepData({
             initialSubject: emailSubject,
@@ -776,7 +844,7 @@ export default function CadenceDetailPage() {
     }
   };
 
-  const handleExecuteStepFromMultiAction = (person, step) => {
+  const handleExecuteStepFromMultiAction = async (person, step) => {
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:499',message:'handleExecuteStepFromMultiAction called',data:{hasPerson:!!person,hasStep:!!step,stepId:step?.cadence_step_id,stepActionType:step?.action_type,stepLabel:step?.step_label},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'Q'})}).catch(()=>{});
     // #endregion
@@ -828,8 +896,76 @@ export default function CadenceDetailPage() {
       fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:538',message:'Opening email modal from multi-action',data:{hasContact:!!contact,contactId:contact?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'T'})}).catch(()=>{});
       // #endregion
       
-      const emailSubject = actionValue?.email_subject || '';
-      const emailBody = actionValue?.email_body || '';
+      let emailSubject = actionValue?.email_subject || '';
+      let emailBody = actionValue?.email_body || '';
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:875',message:'Checking for thread in actionValue (multi-action)',data:{hasActionValue:!!actionValue,threadValue:actionValue?.thread,threadType:typeof actionValue?.thread,threadIsTruthy:!!actionValue?.thread},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
+      // Check if thread is specified and fetch threaded content
+      if (actionValue?.thread) {
+        try {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:878',message:'Fetching touches for threading (multi-action)',data:{cadenceId,contactId:contact.id,threadValue:actionValue.thread},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
+          const touches = await fetchTouchesByContactAndCadence(cadenceId, contact.id);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:880',message:'Touches fetched for threading (multi-action)',data:{touchesCount:touches.length,touches:touches.map(t=>({id:t.id,cadence_step_id:t.cadence_step_id,touch_type:t.touch_type,subject:t.subject})),threadValue:actionValue.thread},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+          const threadedTouch = touches.find(t => t.cadence_step_id === actionValue.thread);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:881',message:'Threaded touch lookup result (multi-action)',data:{hasThreadedTouch:!!threadedTouch,threadedTouchId:threadedTouch?.id,threadedTouchCadenceStepId:threadedTouch?.cadence_step_id,threadedTouchBodyLength:threadedTouch?.body?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
+          
+          if (threadedTouch) {
+            // Build threaded content similar to buildReplyBody
+            const previousBody = threadedTouch.body || "";
+            const sentDate = new Date(threadedTouch.touched_at).toLocaleString("en-US", {
+              dateStyle: "long",
+              timeStyle: "short",
+            });
+            const from = threadedTouch.from || contact.email || "";
+            const to = threadedTouch.to || "";
+            const subject = threadedTouch.subject || "";
+
+            const threadedContent = `
+<p><br><br></p>
+<hr style="border: none; border-top: 1px solid #bfbfbf; margin: 8px 0;" />
+<div style="font-family: Segoe UI, Arial, sans-serif; font-size: 12px; color: #333;">
+  <p style="margin: 0;">
+    <b>From:</b> ${from}<br>
+    <b>Sent:</b> ${sentDate}<br>
+    <b>To:</b> ${to}<br>
+    <b>Subject:</b> ${subject}
+  </p>
+  <div style="margin-top: 8px;">
+    ${previousBody}
+  </div>
+</div>`;
+            
+            // Append threaded content to email body
+            emailBody = emailBody + threadedContent;
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:909',message:'Threaded content appended (multi-action)',data:{emailBodyLength:emailBody.length,threadedContentLength:threadedContent.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            // #endregion
+          } else {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:911',message:'Threaded touch not found (multi-action)',data:{threadValue:actionValue.thread,touchesCount:touches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+            // #endregion
+          }
+        } catch (err) {
+          console.error("Failed to fetch threaded content:", err);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:915',message:'Error fetching threaded content (multi-action)',data:{error:err.message,errorStack:err.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
+          // Continue without threaded content if fetch fails
+        }
+      } else {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:921',message:'No thread specified in actionValue (multi-action)',data:{hasActionValue:!!actionValue,threadValue:actionValue?.thread},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+        // #endregion
+      }
       
       setEmailModalStepData({
         initialSubject: emailSubject,
@@ -1220,6 +1356,9 @@ export default function CadenceDetailPage() {
           email_body: formData.email_body || "",
           thread: formData.thread || null,
         };
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:1358',message:'Email action_value constructed',data:{formDataThread:formData.thread,actionValueThread:actionValue.thread,hasThread:!!actionValue.thread},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
+        // #endregion
       } else if (actionType === 'phone' || actionType === 'call') {
         // Phone/Call step: include instructions
         actionValue = {
@@ -1343,11 +1482,15 @@ export default function CadenceDetailPage() {
       console.error("Failed to parse action_value:", e);
     }
 
+    // Get step_order for current step
+    const currentStepOrder = action.step_order || null;
+
     // Set up initial data for the wizard
     const initialData = {
       step_label: stepLabel,
       action_type: actionType,
       day_number: dayNumber,
+      step_order: currentStepOrder,
       ...(actionType === 'email' && actionValue ? {
         email_subject: actionValue.email_subject || "",
         email_body: actionValue.email_body || "",
@@ -2314,6 +2457,10 @@ export default function CadenceDetailPage() {
         initialSubject={stepMetadata?.email_subject}
         initialBody={stepMetadata?.email_body}
         initialThread={stepMetadata?.thread}
+        cadenceStructure={cadenceStructure}
+        currentStepId={editingStepId}
+        currentDayNumber={stepMetadata?.day_number || addStepDayNumber}
+        currentStepOrder={stepMetadata?.step_order || null}
       />
 
       {/* Add Contact to Cadence Modal */}
@@ -2359,6 +2506,7 @@ export default function CadenceDetailPage() {
             initialSubject={emailModalStepData?.initialSubject || ""}
             initialBody={emailModalStepData?.initialBody || ""}
             cadenceId={cadenceId}
+            cadenceStepId={emailModalStepData?.cadenceStepId || null}
             onCompleteStep={
               emailModalStepData?.cadenceStepId && emailModalStepData?.contactCadenceId
                 ? () => handleCompleteStep(
@@ -2393,6 +2541,7 @@ export default function CadenceDetailPage() {
             }}
             instructions={callModalStepData?.instructions || ""}
             cadenceId={cadenceId}
+            cadenceStepId={callModalStepData?.cadenceStepId || null}
             onCompleteStep={
               callModalStepData?.cadenceStepId && callModalStepData?.contactCadenceId
                 ? () => handleCompleteStep(
@@ -2427,6 +2576,7 @@ export default function CadenceDetailPage() {
             }}
             instructions={linkedInModalStepData?.instructions || ""}
             cadenceId={cadenceId}
+            cadenceStepId={linkedInModalStepData?.cadenceStepId || null}
             onCompleteStep={
               linkedInModalStepData?.cadenceStepId && linkedInModalStepData?.contactCadenceId
                 ? () => handleCompleteStep(
