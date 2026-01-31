@@ -81,6 +81,11 @@ export default function CallModal({ isOpen, contact, onClose, onSuccess }) {
               </button>
             )}
           </div>
+          {(contact?.mobile_phone || contact?.phone) && (
+            <div className="mt-2 text-sm text-gray-600">
+              <span className="font-medium">Phone:</span> {contact.mobile_phone || contact.phone}
+            </div>
+          )}
         </DialogHeader>
         <textarea
           className="w-full border rounded p-2 mb-4"

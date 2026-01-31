@@ -582,6 +582,8 @@ export default function CadencesPage() {
           last_name: person.lastName || person.last_name || '',
           email: person.email || null,
           linkedin_url: person.linkedin_url || null,
+          mobile_phone: person.mobile_phone || person.phone || null,
+          phone: person.mobile_phone || person.phone || null,
         };
         
         // Open appropriate modal based on action_type
@@ -707,6 +709,8 @@ export default function CadencesPage() {
       last_name: person.lastName || person.last_name || '',
       email: person.email || null,
       linkedin_url: person.linkedin_url || null,
+      mobile_phone: person.mobile_phone || person.phone || null,
+      phone: person.mobile_phone || person.phone || null,
     };
     
     // Open appropriate modal based on action_type

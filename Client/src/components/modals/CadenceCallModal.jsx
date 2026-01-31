@@ -77,7 +77,7 @@ export default function CadenceCallModal({ isOpen, contact, onClose, onSuccess, 
             </DialogTitle>
             {/* #region agent log */}
             {(() => {
-              fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceCallModal.jsx:75',message:'Checking contact for LinkedIn URL',data:{hasContact:!!contact,contactKeys:contact?Object.keys(contact):[],linkedin_url:contact?.linkedin_url,linkedInUrl:contact?.linkedInUrl,linkedinUrl:contact?.linkedinUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+              fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceCallModal.jsx:75',message:'Checking contact for phone number',data:{hasContact:!!contact,contactKeys:contact?Object.keys(contact):[],mobile_phone:contact?.mobile_phone,phone:contact?.phone,hasMobilePhone:!!contact?.mobile_phone,hasPhone:!!contact?.phone},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
               return null;
             })()}
             {/* #endregion */}
@@ -92,6 +92,11 @@ export default function CadenceCallModal({ isOpen, contact, onClose, onSuccess, 
               </button>
             )}
           </div>
+          {(contact?.mobile_phone || contact?.phone) && (
+            <div className="mt-2 text-sm text-gray-600">
+              <span className="font-medium">Phone:</span> {contact.mobile_phone || contact.phone}
+            </div>
+          )}
         </DialogHeader>
         
         {/* Step Instructions Section */}
