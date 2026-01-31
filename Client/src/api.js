@@ -69,6 +69,19 @@ export async function updateContact(contactId, contactData) {
   }
 }
 
+export async function deleteContact(contactId) {
+  try {
+    const res = await fetch(`${BASE_URL}/contacts/${contactId}`, {
+      method: "DELETE",
+    })
+    if (!res.ok) throw new Error("Failed to delete contact")
+    return true
+  } catch (err) {
+    console.error("Delete contact error:", err)
+    throw err
+  }
+}
+
 // ----------------------
 // TAGS
 // ----------------------

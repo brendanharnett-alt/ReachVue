@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef, useLayoutEffect, useCallback } from "react"
-import { fetchContacts } from "../api"
+import { fetchContacts, deleteContact } from "../api"
 import CallModal from "./modals/CallModal"
 import LinkedInModal from "./modals/LinkedInModal"
 import TouchHistoryModal from "./modals/TouchHistoryModal"
@@ -757,6 +757,7 @@ export default function ContactsTable() {
   const [contacts, setContacts] = useState([])
   const [selectedContacts, setSelectedContacts] = useState([])
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false)
   const [showTagModal, setShowTagModal] = useState(false)
   const [groupBy, setGroupBy] = useState("none")
   const [expandedGroups, setExpandedGroups] = useState({})
@@ -880,6 +881,31 @@ export default function ContactsTable() {
     setSelectedContacts((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     )
+
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    if (selectedContacts.length === 0) return
+
+    try {
+      // Delete all selected contacts
+      const deletePromises = selectedContacts.map((id) => deleteContact(id))
+      await Promise.all(deletePromises)
+
+      // Refresh contacts list
+      const data = await fetchContacts()
+      setContacts(data)
+
+      // Clear selection
+      setSelectedContacts([])
+      setShowBulkDeleteDialog(false)
+
+      // Show success message
+      alert(`✅ ${selectedContacts.length} contact(s) deleted successfully.`)
+    } catch (err) {
+      console.error("Error deleting contacts:", err)
+      alert(`❌ Failed to delete contacts. Please try again.`)
+    }
+  }
 
   // 🔹 Get all available tags from contacts (frontend-only)
   const allAvailableTags = useMemo(() => {
@@ -1605,8 +1631,7 @@ export default function ContactsTable() {
               size="sm"
               className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
               onClick={() => {
-                // Placeholder for Delete
-                console.log("Delete - to be implemented")
+                setShowBulkDeleteDialog(true)
               }}
             >
               <Trash2 className="h-4 w-4" />
@@ -1894,6 +1919,32 @@ export default function ContactsTable() {
               onClick={() => setShowDeleteDialog(false)}
             >
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Dialog */}
+      <Dialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Delete</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {selectedContacts.length} contact(s)? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowBulkDeleteDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+            >
+              Delete {selectedContacts.length} Contact{selectedContacts.length !== 1 ? 's' : ''}
             </Button>
           </DialogFooter>
         </DialogContent>
