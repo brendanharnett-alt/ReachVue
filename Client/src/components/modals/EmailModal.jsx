@@ -220,9 +220,11 @@ export default function EmailModal({
             // #endregion
           } else {
             // Order: user content + signature + quoted content (if any)
-            content = userContent + signatureHtml + (quotedContent ? quotedContent : "")
+            // Add extra line break before signature for cadence emails
+            const extraBreak = cadenceStepId ? "<p><br></p>" : ""
+            content = userContent + extraBreak + signatureHtml + (quotedContent ? quotedContent : "")
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:144',message:'Appended signature between user content and quoted content',data:{finalContentLength:content.length,hasQuotedContent},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:144',message:'Appended signature between user content and quoted content',data:{finalContentLength:content.length,hasQuotedContent,hasCadenceStepId:!!cadenceStepId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
             // #endregion
           }
         }
