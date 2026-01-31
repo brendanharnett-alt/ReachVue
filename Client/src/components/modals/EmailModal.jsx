@@ -166,11 +166,46 @@ export default function EmailModal({
       // Start with initial body (blank, reply content, or template content)
       let content = initialBody || ""
       
+      // Check if initialBody contains quoted/threaded email content (has horizontal rule and "From:" structure)
+      // This indicates it's a reply or threaded email where quoted content should be at the bottom
+      // Look for the pattern: <p><br><br></p> followed by <hr (the standard reply separator)
+      const quotedContentPattern = /<p><br><br><\/p>\s*<hr/i
+      const hasQuotedContent = quotedContentPattern.test(content) && content.includes('<b>From:</b>')
+      let userContent = ""
+      let quotedContent = ""
+      
+      if (hasQuotedContent) {
+        // Find the start of quoted content (the <p><br><br></p> before the hr)
+        const match = content.match(quotedContentPattern)
+        if (match && match.index > 0) {
+          userContent = content.substring(0, match.index).trim()
+          quotedContent = content.substring(match.index).trim()
+        } else if (match && match.index === 0) {
+          // If quoted content starts at the beginning, all content is quoted
+          userContent = ""
+          quotedContent = content
+        } else {
+          // Fallback: split at first <hr if pattern match found but index is weird
+          const hrIndex = content.indexOf('<hr')
+          if (hrIndex > 0) {
+            userContent = content.substring(0, hrIndex).trim()
+            quotedContent = content.substring(hrIndex).trim()
+          } else {
+            userContent = ""
+            quotedContent = content
+          }
+        }
+      } else {
+        // No quoted content, treat all as user content
+        userContent = content
+        quotedContent = ""
+      }
+      
       // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:130',message:'Before signature check',data:{contentLength:content.length,hasEmailSettings:!!effectiveEmailSettings,autoSignature:effectiveEmailSettings?.auto_signature,hasSignatureHtml:!!effectiveEmailSettings?.email_signature_html,signatureHtmlPreview:effectiveEmailSettings?.email_signature_html?.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:130',message:'Before signature check',data:{contentLength:content.length,hasQuotedContent,userContentLength:userContent.length,quotedContentLength:quotedContent.length,hasEmailSettings:!!effectiveEmailSettings,autoSignature:effectiveEmailSettings?.auto_signature,hasSignatureHtml:!!effectiveEmailSettings?.email_signature_html,signatureHtmlPreview:effectiveEmailSettings?.email_signature_html?.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
       // #endregion
       
-      // Append signature at the BOTTOM if auto_signature is enabled and signature exists
+      // Append signature between user content and quoted content (or at bottom if no quoted content)
       if (effectiveEmailSettings?.auto_signature && effectiveEmailSettings?.email_signature_html) {
         const signatureHtml = effectiveEmailSettings.email_signature_html.trim()
         // #region agent log
@@ -178,21 +213,22 @@ export default function EmailModal({
         // #endregion
         if (signatureHtml) {
           // If content is empty, just use signature
-          // Otherwise, append signature at the bottom (after existing content)
-          if (!content || content === "<p></p>" || content === "<p><br></p>") {
-            content = signatureHtml
+          if (!userContent || userContent === "<p></p>" || userContent === "<p><br></p>") {
+            content = signatureHtml + (quotedContent ? quotedContent : "")
             // #region agent log
             fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:140',message:'Content was empty, using signature only',data:{finalContentLength:content.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
             // #endregion
           } else {
-            // Append signature at the bottom (after existing content)
-            content = content + signatureHtml
+            // Order: user content + signature + quoted content (if any)
+            content = userContent + signatureHtml + (quotedContent ? quotedContent : "")
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:144',message:'Appended signature at bottom of existing content',data:{finalContentLength:content.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:144',message:'Appended signature between user content and quoted content',data:{finalContentLength:content.length,hasQuotedContent},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
             // #endregion
           }
         }
       } else {
+        // No signature, just combine user content and quoted content
+        content = userContent + (quotedContent ? quotedContent : "")
         // #region agent log
         fetch('http://127.0.0.1:7243/ingest/dceac54d-072c-487e-97d1-c96838cd6875',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EmailModal.jsx:149',message:'Signature condition NOT met',data:{hasEmailSettings:!!effectiveEmailSettings,autoSignature:effectiveEmailSettings?.auto_signature,hasSignatureHtml:!!effectiveEmailSettings?.email_signature_html},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
         // #endregion

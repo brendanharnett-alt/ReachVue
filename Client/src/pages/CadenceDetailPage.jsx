@@ -740,8 +740,9 @@ export default function CadenceDetailPage() {
                   dateStyle: "long",
                   timeStyle: "short",
                 });
-                const from = threadedTouch.from || contact.email || "";
-                const to = threadedTouch.to || "";
+                const from = threadedTouch.from || "brendan.harnett@ibm.com";
+                // Use contact email for "To" field (the original email was sent TO the contact)
+                const to = threadedTouch.to || contact.email || "";
                 const subject = threadedTouch.subject || "";
 
                 const threadedContent = `
@@ -759,7 +760,7 @@ export default function CadenceDetailPage() {
   </div>
 </div>`;
                 
-                // Append threaded content to email body
+                // Prepend new email body before threaded content (new content should be at top)
                 emailBody = emailBody + threadedContent;
                 // #region agent log
                 fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:751',message:'Threaded content appended',data:{emailBodyLength:emailBody.length,threadedContentLength:threadedContent.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
@@ -925,8 +926,9 @@ export default function CadenceDetailPage() {
               dateStyle: "long",
               timeStyle: "short",
             });
-            const from = threadedTouch.from || contact.email || "";
-            const to = threadedTouch.to || "";
+            const from = threadedTouch.from || "brendan.harnett@ibm.com";
+            // Use contact email for "To" field (the original email was sent TO the contact)
+            const to = threadedTouch.to || contact.email || "";
             const subject = threadedTouch.subject || "";
 
             const threadedContent = `
@@ -944,7 +946,7 @@ export default function CadenceDetailPage() {
   </div>
 </div>`;
             
-            // Append threaded content to email body
+            // Prepend new email body before threaded content (new content should be at top)
             emailBody = emailBody + threadedContent;
             // #region agent log
             fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:909',message:'Threaded content appended (multi-action)',data:{emailBodyLength:emailBody.length,threadedContentLength:threadedContent.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});

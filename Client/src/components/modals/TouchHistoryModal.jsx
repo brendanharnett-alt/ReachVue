@@ -69,14 +69,15 @@ function formatShortDateTime(dateString) {
 }
 
 // 🟦 Helper to build Outlook-style quoted reply body
-function buildReplyBody(touch) {
+function buildReplyBody(touch, contactEmail = "") {
   const previousBody = touch.body || ""
   const sentDate = new Date(touch.touched_at).toLocaleString("en-US", {
     dateStyle: "long",
     timeStyle: "short",
   })
   const from = "brendan.harnett@ibm.com"
-  const to = touch.to || ""
+  // Use contact email for "To" field when replying (the original email was sent TO the contact)
+  const to = touch.to || contactEmail || ""
   const subject = touch.subject || ""
 
   return `
@@ -283,7 +284,7 @@ export default function TouchHistoryModal({ open, onClose, contact, onReply, onE
                   onReply &&
                   onReply({
                     initialSubject: touch.subject ? `Re: ${touch.subject}` : "Re:",
-                    initialBody: buildReplyBody(touch),
+                    initialBody: buildReplyBody(touch, contact?.email || ""),
                   })
                 }
                 className="flex items-center text-xs text-blue-600 hover:underline"

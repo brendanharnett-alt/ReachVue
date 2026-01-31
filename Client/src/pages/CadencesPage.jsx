@@ -600,8 +600,9 @@ export default function CadencesPage() {
                   dateStyle: "long",
                   timeStyle: "short",
                 });
-                const from = threadedTouch.from || contact.email || "";
-                const to = threadedTouch.to || "";
+                const from = threadedTouch.from || "brendan.harnett@ibm.com";
+                // Use contact email for "To" field (the original email was sent TO the contact)
+                const to = threadedTouch.to || contact.email || "";
                 const subject = threadedTouch.subject || "";
 
                 const threadedContent = `
@@ -723,8 +724,9 @@ export default function CadencesPage() {
               dateStyle: "long",
               timeStyle: "short",
             });
-            const from = threadedTouch.from || contact.email || "";
-            const to = threadedTouch.to || "";
+            const from = threadedTouch.from || "brendan.harnett@ibm.com";
+            // Use contact email for "To" field (the original email was sent TO the contact)
+            const to = threadedTouch.to || contact.email || "";
             const subject = threadedTouch.subject || "";
 
             const threadedContent = `
