@@ -39,7 +39,7 @@ import CadenceStepEmailModal from "@/components/modals/CadenceStepEmailModal";
 import EmailModal from "@/components/modals/EmailModal";
 import CadenceCallModal from "@/components/modals/CadenceCallModal";
 import CadenceLinkedInModal from "@/components/modals/CadenceLinkedInModal";
-import { fetchCadenceSteps, createCadenceStep, deleteCadenceStep, fetchCadenceContacts, fetchAllCadenceContacts, fetchTouchesByContactAndCadence, fetchCadenceHistoryByContactAndCadence, addContactToCadence, fetchContacts, removeContactFromCadence, skipCadenceStep, completeCadenceStep, postponeCadenceStep, fetchCadenceById } from "@/api";
+import { fetchCadenceSteps, createCadenceStep, updateCadenceStep, deleteCadenceStep, fetchCadenceContacts, fetchAllCadenceContacts, fetchTouchesByContactAndCadence, fetchCadenceHistoryByContactAndCadence, addContactToCadence, fetchContacts, removeContactFromCadence, skipCadenceStep, completeCadenceStep, postponeCadenceStep, fetchCadenceById } from "@/api";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -253,6 +253,8 @@ export default function CadenceDetailPage() {
   const [contentModalOpen, setContentModalOpen] = useState(false);
   const [emailContentModalOpen, setEmailContentModalOpen] = useState(false);
   const [stepMetadata, setStepMetadata] = useState(null);
+  const [editingStepId, setEditingStepId] = useState(null);
+  const [editingStepInitialData, setEditingStepInitialData] = useState(null);
   const isTransitioningToContent = useRef(false);
   const [cadenceActionsOpen, setCadenceActionsOpen] = useState(false);
   const [draggedItem, setDraggedItem] = useState(null);
@@ -1170,8 +1172,12 @@ export default function CadenceDetailPage() {
   const handleNextToContent = (metadata) => {
     // Set flag to prevent metadata reset during transition
     isTransitioningToContent.current = true;
+    // Merge with initial data if editing
+    const mergedMetadata = editingStepInitialData 
+      ? { ...editingStepInitialData, ...metadata }
+      : metadata;
     // Store metadata BEFORE closing the first modal
-    setStepMetadata(metadata);
+    setStepMetadata(mergedMetadata);
     // Close first modal and open appropriate content modal based on action_type
     setAddStepModalOpen(false);
     // Small delay to ensure state is set before opening next modal
@@ -1203,13 +1209,6 @@ export default function CadenceDetailPage() {
         return;
       }
 
-      // Calculate step_order (next available order for this cadence)
-      const allSteps = cadenceStructure.flatMap((day) => day.actions);
-      const maxStepOrder = allSteps.length > 0 
-        ? Math.max(...allSteps.map((a) => a.step_order || 0))
-        : -1;
-      const nextStepOrder = maxStepOrder + 1;
-
       // Construct action_value JSON object based on step type
       const actionType = formData.action_type || 'task';
       let actionValue = null;
@@ -1238,23 +1237,52 @@ export default function CadenceDetailPage() {
         };
       }
 
-      // Create the step via API
-      const stepPayload = {
-        step_order: nextStepOrder,
-        day_number: formData.day_number || 0,
-        step_label: formData.step_label,
-        action_type: actionType,
-        action_value: actionValue,
-      };
-      
-      console.log('Creating step with payload:', stepPayload);
-      await createCadenceStep(cadenceId, stepPayload);
+      // Check if we're editing or creating
+      if (editingStepId) {
+        // Update existing step
+        const existingStep = cadenceStructure
+          .flatMap((day) => day.actions)
+          .find((a) => a.id === editingStepId);
+        
+        const stepPayload = {
+          step_order: existingStep?.step_order || 0,
+          day_number: formData.day_number || 0,
+          step_label: formData.step_label,
+          action_type: actionType,
+          action_value: actionValue,
+          is_active: true,
+        };
+        
+        console.log('Updating step with payload:', stepPayload);
+        await updateCadenceStep(editingStepId, stepPayload);
+      } else {
+        // Create new step
+        // Calculate step_order (next available order for this cadence)
+        const allSteps = cadenceStructure.flatMap((day) => day.actions);
+        const maxStepOrder = allSteps.length > 0 
+          ? Math.max(...allSteps.map((a) => a.step_order || 0))
+          : -1;
+        const nextStepOrder = maxStepOrder + 1;
+
+        const stepPayload = {
+          step_order: nextStepOrder,
+          day_number: formData.day_number || 0,
+          step_label: formData.step_label,
+          action_type: actionType,
+          action_value: actionValue,
+        };
+        
+        console.log('Creating step with payload:', stepPayload);
+        await createCadenceStep(cadenceId, stepPayload);
+      }
 
       // Reset modals and state
       setAddStepModalOpen(false);
       setContentModalOpen(false);
       setEmailContentModalOpen(false);
       setStepMetadata(null);
+      setEditingStepId(null);
+      setEditingStepInitialData(null);
 
       // Reload steps from backend
       const steps = await fetchCadenceSteps(cadenceId);
@@ -1287,8 +1315,62 @@ export default function CadenceDetailPage() {
   };
 
   const handleEditAction = (dayIndex, actionIndex) => {
-    // Placeholder - would open edit modal
-    console.log("Edit action:", dayIndex, actionIndex);
+    // #region agent log
+    const overlayCount = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:1317',message:'handleEditAction called',data:{dayIndex,actionIndex,overlayCountBefore:overlayCount,addStepModalOpen,contentModalOpen,emailContentModalOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    const action = cadenceStructure[dayIndex]?.actions[actionIndex];
+    if (!action || !action.id) {
+      console.error("Cannot edit: action or action.id is missing", { action, dayIndex, actionIndex });
+      return;
+    }
+
+    // Extract step data
+    const stepId = action.id;
+    const stepLabel = action.label || "";
+    const actionType = action.type || "task";
+    const dayNumber = cadenceStructure[dayIndex]?.day || 0;
+    
+    // Parse action_value from the step
+    let actionValue = null;
+    try {
+      if (action.action_value) {
+        actionValue = typeof action.action_value === 'string' 
+          ? JSON.parse(action.action_value) 
+          : action.action_value;
+      }
+    } catch (e) {
+      console.error("Failed to parse action_value:", e);
+    }
+
+    // Set up initial data for the wizard
+    const initialData = {
+      step_label: stepLabel,
+      action_type: actionType,
+      day_number: dayNumber,
+      ...(actionType === 'email' && actionValue ? {
+        email_subject: actionValue.email_subject || "",
+        email_body: actionValue.email_body || "",
+        thread: actionValue.thread || "",
+      } : {}),
+      ...(actionType !== 'email' && actionValue ? {
+        instructions: actionValue.instructions || "",
+      } : {}),
+    };
+
+    // Store editing state
+    setEditingStepId(stepId);
+    setEditingStepInitialData(initialData);
+    
+    // Open the first modal (AddStepModal) with pre-populated data
+    setAddStepDayNumber(dayNumber);
+    setAddStepModalOpen(true);
+    // #region agent log
+    setTimeout(() => {
+      const overlayCountAfter = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:1360',message:'handleEditAction after opening modal',data:{overlayCountAfter,stepId,actionType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    }, 100);
+    // #endregion
   };
 
   const handleCopyAction = (dayIndex, actionIndex) => {
@@ -2157,40 +2239,81 @@ export default function CadenceDetailPage() {
       <AddStepModal
         open={addStepModalOpen}
         onClose={() => {
+          // #region agent log
+          const overlayCountBefore = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:2231',message:'AddStepModal onClose called',data:{overlayCountBefore,isTransitioning:isTransitioningToContent.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           setAddStepModalOpen(false);
           // Only reset metadata if we're not transitioning to content modal
           if (!isTransitioningToContent.current) {
             setStepMetadata(null);
+            setEditingStepId(null);
+            setEditingStepInitialData(null);
           }
+          // #region agent log
+          setTimeout(() => {
+            const overlayCountAfter = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:2240',message:'AddStepModal onClose after state update',data:{overlayCountAfter,addStepModalOpen:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          }, 200);
+          // #endregion
         }}
         onSuccess={handleAddStepSuccess}
         onNext={handleNextToContent}
         dayNumber={addStepDayNumber}
+        initialData={editingStepInitialData}
       />
 
       {/* Step Content Modal (Phone, LinkedIn, Task) */}
       <StepContentModal
         open={contentModalOpen}
         onClose={() => {
+          // #region agent log
+          const overlayCountBefore = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:2247',message:'StepContentModal onClose called',data:{overlayCountBefore},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           setContentModalOpen(false);
           setStepMetadata(null);
+          setEditingStepId(null);
+          setEditingStepInitialData(null);
+          // #region agent log
+          setTimeout(() => {
+            const overlayCountAfter = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:2254',message:'StepContentModal onClose after state update',data:{overlayCountAfter},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          }, 200);
+          // #endregion
         }}
         onBack={handleBackToStepModal}
         onSuccess={handleAddStepSuccess}
         stepData={stepMetadata}
         actionType={stepMetadata?.action_type}
+        initialInstructions={stepMetadata?.instructions}
       />
 
       {/* Email Content Modal */}
       <CadenceStepEmailModal
         open={emailContentModalOpen}
         onClose={() => {
+          // #region agent log
+          const overlayCountBefore = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:2263',message:'CadenceStepEmailModal onClose called',data:{overlayCountBefore},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
           setEmailContentModalOpen(false);
           setStepMetadata(null);
+          setEditingStepId(null);
+          setEditingStepInitialData(null);
+          // #region agent log
+          setTimeout(() => {
+            const overlayCountAfter = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:2270',message:'CadenceStepEmailModal onClose after state update',data:{overlayCountAfter},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          }, 200);
+          // #endregion
         }}
         onBack={handleBackToStepModal}
         onSuccess={handleAddStepSuccess}
         stepData={stepMetadata}
+        initialSubject={stepMetadata?.email_subject}
+        initialBody={stepMetadata?.email_body}
+        initialThread={stepMetadata?.thread}
       />
 
       {/* Add Contact to Cadence Modal */}

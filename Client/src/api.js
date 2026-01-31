@@ -225,6 +225,31 @@ export async function createCadenceStep(cadenceId, { step_order, day_number, ste
   }
 }
 
+export async function updateCadenceStep(stepId, { step_order, day_number, step_label, action_type, action_value, is_active }) {
+  try {
+    const res = await fetch(`${BASE_URL}/cadence-steps/${stepId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        step_order,
+        day_number: day_number || 0,
+        step_label,
+        action_type: action_type || 'task',
+        action_value: action_value || null,
+        is_active: is_active !== undefined ? is_active : true,
+      }),
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || "Failed to update cadence step")
+    }
+    return await res.json()
+  } catch (err) {
+    console.error("Update cadence step error:", err)
+    throw err
+  }
+}
+
 export async function deleteCadenceStep(stepId) {
   try {
     const res = await fetch(`${BASE_URL}/cadence-steps/${stepId}`, {

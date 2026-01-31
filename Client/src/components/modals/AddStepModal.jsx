@@ -17,14 +17,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export default function AddStepModal({ open, onClose, onSuccess, dayNumber = 0, onNext }) {
+export default function AddStepModal({ open, onClose, onSuccess, dayNumber = 0, onNext, initialData = null }) {
   const [formData, setFormData] = useState({
     step_label: "",
     action_type: "email",
     day_number: dayNumber,
   });
 
-  // Reset form when modal opens/closes or dayNumber changes
+  // Reset form when modal opens/closes or dayNumber changes, or pre-populate if initialData is provided
   useEffect(() => {
     if (!open) {
       setFormData({
@@ -32,13 +32,20 @@ export default function AddStepModal({ open, onClose, onSuccess, dayNumber = 0, 
         action_type: "email",
         day_number: dayNumber,
       });
+    } else if (initialData) {
+      // Pre-populate with initial data when editing
+      setFormData({
+        step_label: initialData.step_label || "",
+        action_type: initialData.action_type || "email",
+        day_number: initialData.day_number !== undefined ? initialData.day_number : dayNumber,
+      });
     } else {
       setFormData((prev) => ({
         ...prev,
         day_number: dayNumber,
       }));
     }
-  }, [open, dayNumber]);
+  }, [open, dayNumber, initialData]);
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -79,23 +86,58 @@ export default function AddStepModal({ open, onClose, onSuccess, dayNumber = 0, 
 
   // Check for lingering backdrop elements after modal closes
   useEffect(() => {
+    // #region agent log
+    const overlayCount = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+    const allOverlays = document.querySelectorAll('[data-radix-dialog-overlay], [role="dialog"] + div, body > div[style*="pointer-events"]');
+    const bodyStyle = window.getComputedStyle(document.body);
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AddStepModal.jsx:88',message:'AddStepModal useEffect open state change',data:{open,overlayCountBefore:overlayCount,allOverlayCountBefore:allOverlays.length,bodyPointerEvents:bodyStyle.pointerEvents,bodyOverflow:bodyStyle.overflow},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
     if (!open) {
       setTimeout(() => {
         const overlays = document.querySelectorAll('[data-radix-dialog-overlay]');
-        if (overlays.length > 0) {
-          overlays.forEach(overlay => {
-            if (overlay.getAttribute('data-state') === 'closed' || !overlay.getAttribute('data-state')) {
-              overlay.remove();
-            }
-          });
+        const allOverlays = document.querySelectorAll('[data-radix-dialog-overlay], [role="dialog"] + div, body > div[style*="pointer-events"]');
+        const bodyStyle = window.getComputedStyle(document.body);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AddStepModal.jsx:95',message:'AddStepModal cleanup check',data:{overlayCount:overlays.length,allOverlayCount:allOverlays.length,overlays:Array.from(overlays).map(o=>({state:o.getAttribute('data-state'),id:o.id,style:o.getAttribute('style')})),bodyPointerEvents:bodyStyle.pointerEvents,bodyOverflow:bodyStyle.overflow},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
+        // Force remove ALL overlays regardless of state
+        let removedCount = 0;
+        overlays.forEach(overlay => {
+          overlay.remove();
+          removedCount++;
+        });
+        // Also check for body style locks
+        if (bodyStyle.pointerEvents === 'none' || bodyStyle.overflow === 'hidden') {
+          document.body.style.pointerEvents = '';
+          document.body.style.overflow = '';
         }
-      }, 100);
+        // #region agent log
+        const overlayCountAfter = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+        const allOverlayCountAfter = document.querySelectorAll('[data-radix-dialog-overlay], [role="dialog"] + div, body > div[style*="pointer-events"]').length;
+        const bodyStyleAfter = window.getComputedStyle(document.body);
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AddStepModal.jsx:108',message:'AddStepModal cleanup complete',data:{removedCount,overlayCountAfter,allOverlayCountAfter,bodyPointerEventsAfter:bodyStyleAfter.pointerEvents,bodyOverflowAfter:bodyStyleAfter.overflow},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
+      }, 200);
     }
   }, [open]);
 
   const handleOpenChange = (isOpen) => {
+    // #region agent log
+    const overlayCount = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+    const allOverlays = document.querySelectorAll('[data-radix-dialog-overlay], [role="dialog"] + div, body > div[style*="pointer-events"]');
+    const bodyStyle = window.getComputedStyle(document.body);
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AddStepModal.jsx:116',message:'AddStepModal handleOpenChange called',data:{isOpen,overlayCount,allOverlayCount:allOverlays.length,bodyPointerEvents:bodyStyle.pointerEvents,bodyOverflow:bodyStyle.overflow},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+    // #endregion
     if (!isOpen) {
       onClose();
+      // #region agent log
+      setTimeout(() => {
+        const overlayCountAfter = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+        const allOverlaysAfter = document.querySelectorAll('[data-radix-dialog-overlay], [role="dialog"] + div, body > div[style*="pointer-events"]');
+        const bodyStyleAfter = window.getComputedStyle(document.body);
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AddStepModal.jsx:123',message:'AddStepModal handleOpenChange after onClose',data:{overlayCountAfter,allOverlayCountAfter:allOverlaysAfter.length,bodyPointerEventsAfter:bodyStyleAfter.pointerEvents,bodyOverflowAfter:bodyStyleAfter.overflow},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+      }, 300);
+      // #endregion
     }
   };
 
@@ -104,9 +146,9 @@ export default function AddStepModal({ open, onClose, onSuccess, dayNumber = 0, 
       <DialogContent className="max-w-lg p-0 overflow-hidden">
         {/* Header */}
         <DialogHeader className="px-5 pt-2.5 pb-1">
-          <DialogTitle className="text-base">Add Step</DialogTitle>
+          <DialogTitle className="text-base">{initialData ? "Edit Step" : "Add Step"}</DialogTitle>
           <DialogDescription className="text-xs text-gray-500">
-            Add a new step to your cadence.
+            {initialData ? "Edit the step details." : "Add a new step to your cadence."}
           </DialogDescription>
         </DialogHeader>
 

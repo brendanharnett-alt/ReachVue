@@ -77,6 +77,9 @@ export default function CadenceStepEmailModal({
   onSuccess,
   stepData,
   emailSettings = null,
+  initialSubject = "",
+  initialBody = "",
+  initialThread = "",
 }) {
   const subjectRef = useRef(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -125,26 +128,64 @@ export default function CadenceStepEmailModal({
 
   // Reset editor + subject when modal closes
   useEffect(() => {
+    // #region agent log
+    const overlayCount = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+    const allOverlays = document.querySelectorAll('[data-radix-dialog-overlay], [role="dialog"] + div, body > div[style*="pointer-events"]');
+    const bodyStyle = window.getComputedStyle(document.body);
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceStepEmailModal.jsx:127',message:'CadenceStepEmailModal useEffect open state change',data:{open,overlayCountBefore:overlayCount,allOverlayCountBefore:allOverlays.length,bodyPointerEvents:bodyStyle.pointerEvents,bodyOverflow:bodyStyle.overflow},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
     if (!open && editor) {
       editor.commands.setContent("")
       if (subjectRef.current) subjectRef.current.value = ""
       setThread("")
+      // Cleanup overlays when modal closes
+      setTimeout(() => {
+        const overlays = document.querySelectorAll('[data-radix-dialog-overlay]');
+        const allOverlays = document.querySelectorAll('[data-radix-dialog-overlay], [role="dialog"] + div, body > div[style*="pointer-events"]');
+        const bodyStyle = window.getComputedStyle(document.body);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceStepEmailModal.jsx:137',message:'CadenceStepEmailModal cleanup check',data:{overlayCount:overlays.length,allOverlayCount:allOverlays.length,overlays:Array.from(overlays).map(o=>({state:o.getAttribute('data-state'),id:o.id,style:o.getAttribute('style')})),bodyPointerEvents:bodyStyle.pointerEvents,bodyOverflow:bodyStyle.overflow},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+        // #endregion
+        // Force remove ALL overlays regardless of state
+        let removedCount = 0;
+        overlays.forEach(overlay => {
+          overlay.remove();
+          removedCount++;
+        });
+        // Also check for body style locks
+        if (bodyStyle.pointerEvents === 'none' || bodyStyle.overflow === 'hidden') {
+          document.body.style.pointerEvents = '';
+          document.body.style.overflow = '';
+        }
+        // #region agent log
+        const overlayCountAfter = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+        const allOverlayCountAfter = document.querySelectorAll('[data-radix-dialog-overlay], [role="dialog"] + div, body > div[style*="pointer-events"]').length;
+        const bodyStyleAfter = window.getComputedStyle(document.body);
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceStepEmailModal.jsx:150',message:'CadenceStepEmailModal cleanup complete',data:{removedCount,overlayCountAfter,allOverlayCountAfter,bodyPointerEventsAfter:bodyStyleAfter.pointerEvents,bodyOverflowAfter:bodyStyleAfter.overflow},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+        // #endregion
+      }, 200);
     }
   }, [open, editor])
 
-  // Prefill subject + body (empty for cadence step creation - signature will be added during execution)
+  // Prefill subject + body when modal opens (for editing) or start empty (for creation)
   useEffect(() => {
     if (!open || !editor) return
 
     requestAnimationFrame(() => {
       if (subjectRef.current) {
-        subjectRef.current.value = ""
+        subjectRef.current.value = initialSubject || ""
       }
+      setThread(initialThread || "")
 
-      // Start with empty content - signature will be added when the step is executed, not during creation
-      editor.commands.setContent("", false)
+      // Pre-populate body if editing, otherwise start empty
+      if (initialBody) {
+        editor.commands.setContent(initialBody, false)
+      } else {
+        // Start with empty content - signature will be added when the step is executed, not during creation
+        editor.commands.setContent("", false)
+      }
     })
-  }, [open, editor])
+  }, [open, editor, initialSubject, initialBody, initialThread])
 
   const handleAddStep = async () => {
     const subject = subjectRef.current?.value || ""
@@ -210,8 +251,22 @@ export default function CadenceStepEmailModal({
   const fontSizes = ["12px", "14px", "18px", "24px"]
 
   const handleOpenChange = (isOpen) => {
+    // #region agent log
+    const overlayCount = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+    const allOverlays = document.querySelectorAll('[data-radix-dialog-overlay], [role="dialog"] + div, body > div[style*="pointer-events"]');
+    const bodyStyle = window.getComputedStyle(document.body);
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceStepEmailModal.jsx:243',message:'CadenceStepEmailModal handleOpenChange called',data:{isOpen,overlayCount,allOverlayCount:allOverlays.length,bodyPointerEvents:bodyStyle.pointerEvents,bodyOverflow:bodyStyle.overflow},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
+    // #endregion
     if (!isOpen) {
       onClose()
+      // #region agent log
+      setTimeout(() => {
+        const overlayCountAfter = document.querySelectorAll('[data-radix-dialog-overlay]').length;
+        const allOverlaysAfter = document.querySelectorAll('[data-radix-dialog-overlay], [role="dialog"] + div, body > div[style*="pointer-events"]');
+        const bodyStyleAfter = window.getComputedStyle(document.body);
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceStepEmailModal.jsx:250',message:'CadenceStepEmailModal handleOpenChange after onClose',data:{overlayCountAfter,allOverlayCountAfter:allOverlaysAfter.length,bodyPointerEventsAfter:bodyStyleAfter.pointerEvents,bodyOverflowAfter:bodyStyleAfter.overflow},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
+      }, 300);
+      // #endregion
     }
   }
 
@@ -220,9 +275,9 @@ export default function CadenceStepEmailModal({
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Add Email Step</DialogTitle>
+            <DialogTitle>{initialBody ? "Edit Email Step" : "Add Email Step"}</DialogTitle>
             <DialogDescription>
-              Create the email content for this cadence step.
+              {initialBody ? "Edit the email content for this cadence step." : "Create the email content for this cadence step."}
             </DialogDescription>
           </DialogHeader>
 
@@ -407,7 +462,7 @@ export default function CadenceStepEmailModal({
               Cancel
             </Button>
             <Button onClick={handleAddStep} className="bg-blue-600 text-white">
-              Add Step
+              {initialBody ? "Update Step" : "Add Step"}
             </Button>
           </DialogFooter>
         </DialogContent>
