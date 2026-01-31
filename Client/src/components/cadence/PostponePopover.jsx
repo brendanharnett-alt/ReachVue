@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Clock } from "lucide-react"
 
-export default function PostponePopover({ onConfirm }) {
+export default function PostponePopover({ onConfirm, disabled = false }) {
   const [open, setOpen] = useState(false)
   const [date, setDate] = useState("")
 
@@ -15,14 +15,19 @@ export default function PostponePopover({ onConfirm }) {
 
   return (
     <Popover
-      open={open}
-      onOpenChange={setOpen}
+      open={open && !disabled}
+      onOpenChange={(newOpen) => !disabled && setOpen(newOpen)}
       modal={false} // critical when nested in Dialog
     >
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="p-1.5 rounded text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+          disabled={disabled}
+          className={`p-1.5 rounded transition ${
+            disabled
+              ? "text-gray-300 cursor-not-allowed opacity-50"
+              : "text-gray-500 hover:text-gray-700 hover:bg-gray-100 cursor-pointer"
+          }`}
           title="Postpone"
         >
           <Clock className="h-4 w-4" />

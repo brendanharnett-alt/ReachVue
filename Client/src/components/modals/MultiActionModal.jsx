@@ -180,32 +180,45 @@ export default function MultiActionModal({
                           ? `Skipped on ${formatSkippedDateTime(
                               step.skipped_at
                             )}`
+                          : step.status === "completed" && step.completed_at
+                          ? `Completed on ${formatSkippedDateTime(
+                              step.completed_at
+                            )}`
                           : formatDateWithOrdinal(step.due_on)}
                       </td>
 
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <button
-                            className="h-6 w-6 rounded-full flex items-center justify-center border hover:bg-gray-100"
-                            onClick={() => {
-                              if (onExecuteStep) {
-                                // Open appropriate touch modal based on step type
-                                onExecuteStep(person, step);
-                              } else {
-                                // Fallback to original behavior
-                                onCompleteStep?.(
-                                  person.id,
-                                  step.cadence_step_id
-                                );
-                              }
-                            }}
-                          >
-                            <Play
-                              className={`h-3 w-3 ${
-                                pastDue ? "text-blue-700" : "text-gray-900"
-                              }`}
-                            />
-                          </button>
+                          {(step.status === "skipped" || step.status === "completed") ? (
+                            <button
+                              className="h-6 w-6 rounded-full flex items-center justify-center border cursor-not-allowed opacity-50"
+                              disabled
+                            >
+                              <Play className="h-3 w-3 text-gray-400" />
+                            </button>
+                          ) : (
+                            <button
+                              className="h-6 w-6 rounded-full flex items-center justify-center border hover:bg-gray-100"
+                              onClick={() => {
+                                if (onExecuteStep) {
+                                  // Open appropriate touch modal based on step type
+                                  onExecuteStep(person, step);
+                                } else {
+                                  // Fallback to original behavior
+                                  onCompleteStep?.(
+                                    person.id,
+                                    step.cadence_step_id
+                                  ).then(() => setRefreshKey((k) => k + 1));
+                                }
+                              }}
+                            >
+                              <Play
+                                className={`h-3 w-3 ${
+                                  pastDue ? "text-blue-700" : "text-gray-900"
+                                }`}
+                              />
+                            </button>
+                          )}
 
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
                             <button
@@ -215,30 +228,56 @@ export default function MultiActionModal({
                               <History className="h-4 w-4 text-gray-500" />
                             </button>
 
-                            <button
-                              onClick={() =>
-                                onSkipStep?.(
-                                  person.id,
-                                  step.cadence_step_id
-                                ).then(() =>
-                                  setRefreshKey((k) => k + 1)
-                                )
-                              }
-                              title="Skip"
-                            >
-                              <SkipForward className="h-4 w-4 text-gray-500" />
-                            </button>
+                            {(step.status === "skipped" || step.status === "completed") ? (
+                              <>
+                                <button
+                                  disabled
+                                  className="cursor-not-allowed opacity-50"
+                                  title="Skip"
+                                >
+                                  <SkipForward className="h-4 w-4 text-gray-300" />
+                                </button>
 
-                            <PostponePopover
-                              onConfirm={async (date) => {
-                                await onPostponeStep(
-                                  person.id,
-                                  step.cadence_step_id,
-                                  date
-                                );
-                                setRefreshKey((k) => k + 1);
-                              }}
-                            />
+                                <PostponePopover
+                                  disabled={true}
+                                  onConfirm={async (date) => {
+                                    await onPostponeStep(
+                                      person.id,
+                                      step.cadence_step_id,
+                                      date
+                                    );
+                                    setRefreshKey((k) => k + 1);
+                                  }}
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() =>
+                                    onSkipStep?.(
+                                      person.id,
+                                      step.cadence_step_id
+                                    ).then(() =>
+                                      setRefreshKey((k) => k + 1)
+                                    )
+                                  }
+                                  title="Skip"
+                                >
+                                  <SkipForward className="h-4 w-4 text-gray-500" />
+                                </button>
+
+                                <PostponePopover
+                                  onConfirm={async (date) => {
+                                    await onPostponeStep(
+                                      person.id,
+                                      step.cadence_step_id,
+                                      date
+                                    );
+                                    setRefreshKey((k) => k + 1);
+                                  }}
+                                />
+                              </>
+                            )}
                           </div>
                         </div>
                       </td>
