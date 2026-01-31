@@ -19,6 +19,19 @@ import {
 } from "lucide-react"
 import { fetchCadenceHistoryByContactAndCadence } from "@/api"
 
+// Helper to strip HTML tags for a preview
+function stripHtml(html) {
+  if (!html) return ""
+
+  let text = html.replace(/<[^>]+>/g, " ")
+
+  const textarea = document.createElement("textarea")
+  textarea.innerHTML = text
+  let decoded = textarea.value
+
+  return decoded.replace(/\s+/g, " ").trim()
+}
+
 // Format date: "November 19th, 2025 · 6:23 PM"
 function formatDateWithOrdinal(dateString) {
   if (!dateString) return ""
@@ -143,6 +156,7 @@ export default function CadenceActivityTimelineModal({
   const [offset, setOffset] = useState(0)
   const [limit] = useState(20)
   const [error, setError] = useState(null)
+  const [expandedEventId, setExpandedEventId] = useState(null)
 
   // Get contactId from contact object (contactId is the actual contact_id, not contact_cadence_id)
   const contactId = contact?.contactId
@@ -197,10 +211,26 @@ export default function CadenceActivityTimelineModal({
     }
   }
 
+  const toggleExpand = (eventId) => {
+    setExpandedEventId((prev) => (prev === eventId ? null : eventId))
+  }
+
   const renderTimelineItem = (event, isLast = false) => {
     const { icon: IconComponent, color, borderColor } = getEventIcon(event.event_type)
     const label = getEventLabel(event.event_type, event.metadata)
     const secondaryText = formatSecondaryText(event.day_number, event.step_label)
+    
+    // Check if this is a completed step with touch data
+    const hasTouchData = event.event_type === 'completed' && event.touch_id
+    const isEmailTouch = hasTouchData && event.touch_type === 'email'
+    const isCallTouch = hasTouchData && event.touch_type === 'call'
+    const isLinkedInTouch = hasTouchData && event.touch_type === 'linkedin'
+    const isExpanded = expandedEventId === event.id
+    
+    // For email: check if body is long enough to need expansion
+    const emailBody = event.body || ""
+    const plainText = stripHtml(emailBody)
+    const isLongEmail = plainText.length > 260
 
     return (
       <div
@@ -228,9 +258,83 @@ export default function CadenceActivityTimelineModal({
                   {secondaryText}
                 </div>
               )}
-              <div className="text-xs text-gray-400">
+              <div className="text-xs text-gray-400 mb-2">
                 {formatDateWithOrdinal(event.event_at)}
               </div>
+              
+              {/* Touch details for completed steps */}
+              {hasTouchData && (
+                <div className="mt-2 rounded-lg border p-3 shadow-sm bg-white w-full overflow-hidden break-words">
+                  {/* Touch type tag */}
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 capitalize mb-2 inline-block">
+                    {event.touch_type || "touch"}
+                  </span>
+                  
+                  {/* Email touch details */}
+                  {isEmailTouch && (
+                    <>
+                      {event.subject && (
+                        <p className="font-semibold text-sm break-words mt-2">{event.subject}</p>
+                      )}
+                      {emailBody && (
+                        <div className="mt-1 text-sm text-gray-800">
+                          {!isExpanded ? (
+                            <>
+                              <p className="whitespace-pre-wrap break-words max-h-20 overflow-hidden">
+                                {plainText.slice(0, 260)}
+                                {isLongEmail ? "…" : ""}
+                              </p>
+                              {isLongEmail && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpand(event.id)}
+                                  className="mt-1 text-xs font-medium text-blue-600 hover:underline"
+                                >
+                                  Expand message
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <div className="border rounded-md p-2 max-h-64 overflow-y-auto bg-gray-50">
+                                <div
+                                  className="whitespace-pre-wrap break-words"
+                                  dangerouslySetInnerHTML={{ __html: emailBody }}
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleExpand(event.id)}
+                                className="mt-1 text-xs font-medium text-blue-600 hover:underline"
+                              >
+                                Collapse
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Call touch details */}
+                  {isCallTouch && event.body && (
+                    <div className="mt-2 text-sm text-gray-800">
+                      <div className="whitespace-pre-wrap break-words">
+                        {event.body}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* LinkedIn touch details */}
+                  {isLinkedInTouch && event.body && (
+                    <div className="mt-2 text-sm text-gray-800">
+                      <div className="whitespace-pre-wrap break-words">
+                        {event.body}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

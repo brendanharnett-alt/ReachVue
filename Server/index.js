@@ -1956,7 +1956,8 @@ app.get('/cadences/:cadenceId/contacts/:contactId/history', async (req, res) => 
     );
     const total = parseInt(totalResult.rows[0].count, 10);
 
-    // Fetch paginated history with step details
+    // Fetch paginated history with step details and touch data for completed steps
+    // Use a subquery to get the most recent touch for each completed step
     const result = await pool.query(
       `
       SELECT
@@ -1966,12 +1967,29 @@ app.get('/cadences/:cadenceId/contacts/:contactId/history', async (req, res) => 
         h.cadence_step_id,
         cs.step_label,
         cs.day_number,
-        h.metadata
+        cs.action_type,
+        h.metadata,
+        t.id AS touch_id,
+        t.touch_type,
+        t.subject,
+        t.body,
+        t.touched_at AS touch_touched_at
       FROM contact_cadence_history h
       INNER JOIN contact_cadences cc
         ON cc.id = h.contact_cadence_id
       LEFT JOIN cadence_steps cs
         ON cs.id = h.cadence_step_id
+      LEFT JOIN LATERAL (
+        SELECT id, touch_type, subject, body, touched_at
+        FROM touches
+        WHERE cadence_step_id = h.cadence_step_id
+          AND contact_id = $1
+          AND cadence_id = $2
+          AND touched_at <= h.event_at + INTERVAL '5 minutes'
+          AND touched_at >= h.event_at - INTERVAL '5 minutes'
+        ORDER BY touched_at DESC
+        LIMIT 1
+      ) t ON h.event_type = 'completed' AND h.cadence_step_id IS NOT NULL
       WHERE cc.contact_id = $1
         AND cc.cadence_id = $2
       ORDER BY h.event_at DESC
