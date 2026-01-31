@@ -376,6 +376,16 @@ export default function TouchHistoryModal({ open, onClose, contact, onReply, onE
                   <DialogTitle className="mb-0">
                     Interaction History
                   </DialogTitle>
+                  {contact?.linkedin_url && (
+                    <button
+                      onClick={() => window.open(contact.linkedin_url, '_blank', 'noopener,noreferrer')}
+                      className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                      title="Open LinkedIn Profile"
+                      aria-label="Open LinkedIn Profile"
+                    >
+                      <Linkedin className="h-5 w-5 text-blue-600" />
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-semibold text-base">

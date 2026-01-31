@@ -109,14 +109,35 @@ app.post('/contacts', async (req, res) => {
 
 app.put('/contacts/:id', async (req, res) => {
   const { id } = req.params;
-  const { company, first_name, last_name, title, linkedin_url, email, mobile_phone, tag_ids } = req.body;
+  const { company, first_name, last_name, title, linkedin_url, email, mobile_phone, tag_ids, notes } = req.body;
 
   try {
-    const updateContactQuery = `
-      UPDATE contacts SET company=$1, first_name=$2, last_name=$3, title=$4,
-      linkedin_url=$5, email=$6, mobile_phone=$7 WHERE id=$8 RETURNING *
-    `;
-    const result = await pool.query(updateContactQuery, [company, first_name, last_name, title, linkedin_url, email, mobile_phone, id]);
+    // Check if notes column exists before including it in the update
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='contacts' AND column_name='notes'
+    `);
+    const hasNotesColumn = columnCheck.rows.length > 0;
+
+    let updateContactQuery;
+    let queryParams;
+    
+    if (hasNotesColumn) {
+      updateContactQuery = `
+        UPDATE contacts SET company=$1, first_name=$2, last_name=$3, title=$4,
+        linkedin_url=$5, email=$6, mobile_phone=$7, notes=$8 WHERE id=$9 RETURNING *
+      `;
+      queryParams = [company, first_name, last_name, title, linkedin_url, email, mobile_phone, notes || null, id];
+    } else {
+      updateContactQuery = `
+        UPDATE contacts SET company=$1, first_name=$2, last_name=$3, title=$4,
+        linkedin_url=$5, email=$6, mobile_phone=$7 WHERE id=$8 RETURNING *
+      `;
+      queryParams = [company, first_name, last_name, title, linkedin_url, email, mobile_phone, id];
+    }
+    
+    const result = await pool.query(updateContactQuery, queryParams);
 
     if (result.rowCount === 0) return res.status(404).send("Contact not found.");
 

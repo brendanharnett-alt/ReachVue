@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { updateContact } from "../../api"
 export default function AddIndividualContactModal({ open, onClose, existingTags = [], contact = null, onSuccess }) {
   const isEditMode = !!contact
   
@@ -145,26 +146,47 @@ export default function AddIndividualContactModal({ open, onClose, existingTags 
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  const handleSubmit = () => {
-    // Stub - no backend wiring
-    const contactData = {
-      ...formData,
-      id: contact?.id,
-      first_name: formData.firstName,
-      last_name: formData.lastName,
-      mobile_phone: formData.phone,
-      linkedin_url: formData.linkedInUrl,
-    }
-    
-    if (isEditMode && onSuccess) {
-      onSuccess(contactData)
+  const handleSubmit = async () => {
+    if (isEditMode && contact?.id) {
+      // Update existing contact
+      try {
+        const contactData = {
+          company: formData.company || null,
+          first_name: formData.firstName || null,
+          last_name: formData.lastName || null,
+          title: formData.title || null,
+          email: formData.email || null,
+          phone: formData.phone || null,
+          linkedin_url: formData.linkedInUrl || null,
+          tags: formData.tags || [],
+          notes: formData.notes || null,
+        }
+        
+        const updatedContact = await updateContact(contact.id, contactData)
+        
+        if (onSuccess) {
+          onSuccess(updatedContact)
+        }
+        
+        onClose()
+      } catch (err) {
+        console.error("Failed to update contact:", err)
+        alert("Failed to update contact. Please try again.")
+      }
     } else {
+      // Add new contact (stub for now)
+      const contactData = {
+        ...formData,
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        mobile_phone: formData.phone,
+        linkedin_url: formData.linkedInUrl,
+      }
+      
       console.log("Add contact:", contactData)
-    }
-    
-    onClose()
-    // Reset form only if not in edit mode
-    if (!isEditMode) {
+      onClose()
+      
+      // Reset form
       setFormData({
         company: "",
         firstName: "",

@@ -27,6 +27,48 @@ export async function fetchContactById(id) {
   }
 }
 
+export async function updateContact(contactId, contactData) {
+  try {
+    // Convert tag names to tag IDs
+    let tag_ids = []
+    if (contactData.tags && Array.isArray(contactData.tags) && contactData.tags.length > 0) {
+      const allTags = await fetchTags()
+      const tagMap = new Map(allTags.map(tag => [tag.tag_name, tag.id]))
+      tag_ids = contactData.tags
+        .map(tagName => tagMap.get(tagName))
+        .filter(id => id !== undefined)
+    }
+
+    const payload = {
+      company: contactData.company || null,
+      first_name: contactData.first_name || null,
+      last_name: contactData.last_name || null,
+      title: contactData.title || null,
+      linkedin_url: contactData.linkedin_url || null,
+      email: contactData.email || null,
+      mobile_phone: contactData.phone || contactData.mobile_phone || null,
+      tag_ids: tag_ids,
+      notes: contactData.notes || null,
+    }
+
+    const res = await fetch(`${BASE_URL}/contacts/${contactId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || "Failed to update contact")
+    }
+
+    return await res.json()
+  } catch (err) {
+    console.error("Update contact error:", err)
+    throw err
+  }
+}
+
 // ----------------------
 // TAGS
 // ----------------------

@@ -15,6 +15,7 @@ import {
   UserMinus,
   Clock,
   Calendar,
+  Linkedin,
 } from "lucide-react"
 import { fetchCadenceHistoryByContactAndCadence } from "@/api"
 
@@ -243,9 +244,21 @@ export default function CadenceActivityTimelineModal({
         <DialogHeader>
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
-              <DialogTitle className="mb-0">
-                Cadence Activity Timeline
-              </DialogTitle>
+              <div className="flex items-center gap-2 mb-0">
+                <DialogTitle className="mb-0">
+                  Cadence Activity Timeline
+                </DialogTitle>
+                {contact?.linkedin_url && (
+                  <button
+                    onClick={() => window.open(contact.linkedin_url, '_blank', 'noopener,noreferrer')}
+                    className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                    title="Open LinkedIn Profile"
+                    aria-label="Open LinkedIn Profile"
+                  >
+                    <Linkedin className="h-5 w-5 text-blue-600" />
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-2 mt-2">
                 <span className="font-semibold text-base">
                   {contact

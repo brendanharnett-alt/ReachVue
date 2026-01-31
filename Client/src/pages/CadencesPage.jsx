@@ -575,12 +575,19 @@ export default function CadencesPage() {
         }
         
         // Create contact object for modal
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:578',message:'Person object before contact construction',data:{personId:person?.contactId,personKeys:person?Object.keys(person):[],linkedin_url:person?.linkedin_url,linkedInUrl:person?.linkedInUrl,linkedinUrl:person?.linkedinUrl,hasLinkedinUrl:!!person?.linkedin_url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         const contact = {
           id: person.contactId,
           first_name: person.firstName || person.first_name || '',
           last_name: person.lastName || person.last_name || '',
           email: person.email || null,
+          linkedin_url: person.linkedin_url || null,
         };
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:585',message:'Contact object constructed',data:{contactId:contact.id,contactKeys:Object.keys(contact),linkedin_url:contact.linkedin_url,hasLinkedinUrl:!!contact.linkedin_url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
         
         // Open appropriate modal based on action_type
         if (actionType === 'email') {
@@ -699,12 +706,19 @@ export default function CadencesPage() {
     }
     
     // Create contact object for modal
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:708',message:'Person object before contact construction (multi-action)',data:{personId:person?.contactId,personKeys:person?Object.keys(person):[],linkedin_url:person?.linkedin_url,linkedInUrl:person?.linkedInUrl,linkedinUrl:person?.linkedinUrl,hasLinkedinUrl:!!person?.linkedin_url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     const contact = {
       id: person.contactId,
       first_name: person.firstName || person.first_name || '',
       last_name: person.lastName || person.last_name || '',
       email: person.email || null,
+      linkedin_url: person.linkedin_url || null,
     };
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:717',message:'Contact object constructed (multi-action)',data:{contactId:contact.id,contactKeys:Object.keys(contact),linkedin_url:contact.linkedin_url,hasLinkedinUrl:!!contact.linkedin_url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     
     // Open appropriate modal based on action_type
     if (actionType === 'email') {

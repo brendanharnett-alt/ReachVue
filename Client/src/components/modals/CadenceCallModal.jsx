@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Linkedin } from "lucide-react"
 
 export default function CadenceCallModal({ isOpen, contact, onClose, onSuccess, instructions, cadenceId, cadenceStepId = null, onCompleteStep = null }) {
   const [notes, setNotes] = useState("")
@@ -70,9 +71,28 @@ export default function CadenceCallModal({ isOpen, contact, onClose, onSuccess, 
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            Log Call with {contact.first_name} {contact.last_name}
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle>
+              Log Call with {contact.first_name} {contact.last_name}
+            </DialogTitle>
+            {/* #region agent log */}
+            {(() => {
+              const hasLinkedin = !!(contact?.linkedin_url || contact?.linkedInUrl || contact?.linkedinUrl);
+              fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceCallModal.jsx:75',message:'Checking contact for LinkedIn URL',data:{hasContact:!!contact,contactKeys:contact?Object.keys(contact):[],linkedin_url:contact?.linkedin_url,linkedInUrl:contact?.linkedInUrl,linkedinUrl:contact?.linkedinUrl,hasLinkedinUrl:hasLinkedin,conditionalResult:hasLinkedin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+              return null;
+            })()}
+            {/* #endregion */}
+            {(contact?.linkedin_url || contact?.linkedInUrl || contact?.linkedinUrl) && (
+              <button
+                onClick={() => window.open(contact.linkedin_url || contact.linkedInUrl || contact.linkedinUrl, '_blank', 'noopener,noreferrer')}
+                className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                title="Open LinkedIn Profile"
+                aria-label="Open LinkedIn Profile"
+              >
+                <Linkedin className="h-5 w-5 text-blue-600" />
+              </button>
+            )}
+          </div>
         </DialogHeader>
         
         {/* Step Instructions Section */}
