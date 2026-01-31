@@ -278,9 +278,10 @@ export default function CadencesPage() {
             return dueDate <= today; // Due today or past due
           });
 
-            // Add cadence name and structure to each person
+            // Add cadence name, id, and structure to each person
             return peopleWithDueSteps.map((person) => ({
               ...person,
+              cadenceId: cadence.id,
               cadenceName: cadence.name,
               cadenceStructure: cadenceStructure, // Store structure for this person's cadence
             }));
@@ -1298,6 +1299,8 @@ export default function CadencesPage() {
             setTimelineContact(null);
           }}
           contact={timelineContact}
+          cadenceId={timelineContact.cadenceId}
+          cadenceName={timelineContact.cadenceName}
         />
       )}
 
