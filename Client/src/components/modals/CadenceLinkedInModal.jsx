@@ -76,8 +76,7 @@ export default function CadenceLinkedInModal({ isOpen, contact, onClose, onSucce
             </DialogTitle>
             {/* #region agent log */}
             {(() => {
-              const hasLinkedin = !!(contact?.linkedin_url || contact?.linkedInUrl || contact?.linkedinUrl);
-              fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceLinkedInModal.jsx:75',message:'Checking contact for LinkedIn URL',data:{hasContact:!!contact,contactKeys:contact?Object.keys(contact):[],linkedin_url:contact?.linkedin_url,linkedInUrl:contact?.linkedInUrl,linkedinUrl:contact?.linkedinUrl,hasLinkedinUrl:hasLinkedin,conditionalResult:hasLinkedin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+              fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceLinkedInModal.jsx:75',message:'Checking contact for LinkedIn URL',data:{hasContact:!!contact,contactKeys:contact?Object.keys(contact):[],linkedin_url:contact?.linkedin_url,linkedInUrl:contact?.linkedInUrl,linkedinUrl:contact?.linkedinUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
               return null;
             })()}
             {/* #endregion */}
