@@ -623,9 +623,46 @@ app.get('/touches/:id', async (req, res) => {
 // Templates Endpoints
 // ----------------------
 
+// Add display_order column if it doesn't exist (migration)
+async function ensureDisplayOrderColumn() {
+  try {
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'templates' AND column_name = 'display_order'
+        ) THEN
+          ALTER TABLE templates ADD COLUMN display_order INTEGER;
+          
+          -- Set initial display_order for existing templates
+          UPDATE templates 
+          SET display_order = sub.row_num - 1
+          FROM (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY updated_at DESC) as row_num
+            FROM templates
+          ) sub
+          WHERE templates.id = sub.id;
+        END IF;
+      END $$;
+    `);
+  } catch (err) {
+    console.error('Error ensuring display_order column:', err);
+  }
+}
+
+// Run migration on server start
+ensureDisplayOrderColumn();
+
 app.get('/templates', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM templates ORDER BY updated_at DESC');
+    const result = await pool.query(`
+      SELECT * FROM templates 
+      ORDER BY 
+        CASE WHEN display_order IS NULL THEN 1 ELSE 0 END,
+        display_order ASC NULLS LAST,
+        updated_at DESC
+    `);
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching templates:', err);
@@ -648,11 +685,15 @@ app.get('/templates/:id', async (req, res) => {
 app.post('/templates', async (req, res) => {
   const { user_id, name, type, subject, body, variables } = req.body;
   try {
+    // Get max display_order to set new template at the end
+    const maxOrderResult = await pool.query('SELECT COALESCE(MAX(display_order), -1) as max_order FROM templates');
+    const nextOrder = maxOrderResult.rows[0].max_order + 1;
+    
     const result = await pool.query(
-      `INSERT INTO templates (user_id, name, type, subject, body, variables, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+      `INSERT INTO templates (user_id, name, type, subject, body, variables, display_order, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
        RETURNING *`,
-      [user_id || null, name, type, subject, body, variables || []]
+      [user_id || null, name, type, subject, body, variables || [], nextOrder]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -690,6 +731,33 @@ app.delete('/templates', async (req, res) => {
   } catch (err) {
     console.error('Error deleting templates:', err);
     res.status(500).send('Failed to delete templates');
+  }
+});
+
+// Batch update template display order
+app.patch('/templates/reorder', async (req, res) => {
+  const { orders } = req.body; // expects array of {id, display_order}
+  try {
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return res.status(400).send('No orders provided');
+    }
+
+    // Use a transaction to update all orders atomically
+    await pool.query('BEGIN');
+    
+    for (const { id, display_order } of orders) {
+      await pool.query(
+        'UPDATE templates SET display_order = $1 WHERE id = $2',
+        [display_order, id]
+      );
+    }
+    
+    await pool.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    console.error('Error reordering templates:', err);
+    res.status(500).send('Failed to reorder templates');
   }
 });
 

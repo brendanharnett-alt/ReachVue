@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, FileText, Trash2 } from "lucide-react";
+import { Plus, FileText, Trash2, GripVertical } from "lucide-react";
 import TemplateModal from "@/components/modals/TemplateModal";
 
 // Helper to strip HTML tags for preview
@@ -23,6 +23,12 @@ export default function TemplatesPage() {
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState(null);
+  
+  // Drag and drop state
+  const [draggedTemplateId, setDraggedTemplateId] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+  const saveOrderTimeoutRef = useRef(null);
+  const dragStartFromHandleRef = useRef(false);
 
   // -------------------------
   // Fetch templates from backend
@@ -44,6 +50,24 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     fetchTemplates();
+  }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveOrderTimeoutRef.current) {
+        clearTimeout(saveOrderTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Reset drag flag on mouseup (in case drag was cancelled)
+  useEffect(() => {
+    const handleMouseUp = () => {
+      dragStartFromHandleRef.current = false;
+    };
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
   }, []);
 
   // -------------------------
@@ -105,6 +129,106 @@ export default function TemplatesPage() {
     setShowModal(true);
   };
 
+  // -------------------------
+  // Drag and Drop Handlers
+  // -------------------------
+  const handleGripMouseDown = () => {
+    dragStartFromHandleRef.current = true;
+  };
+
+  const handleDragStart = (e, templateId) => {
+    // Only allow dragging if it started from the grip icon
+    if (!dragStartFromHandleRef.current) {
+      e.preventDefault();
+      return false;
+    }
+    dragStartFromHandleRef.current = false;
+    setDraggedTemplateId(templateId);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/html", e.target.outerHTML);
+    const row = e.currentTarget;
+    row.style.opacity = "0.5";
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverIndex(index);
+  };
+
+  const handleDragLeave = (e) => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e, targetIndex) => {
+    e.preventDefault();
+    setDragOverIndex(null);
+
+    if (!draggedTemplateId || targetIndex === null) {
+      setDraggedTemplateId(null);
+      return;
+    }
+
+    const draggedIndex = templates.findIndex((t) => t.id === draggedTemplateId);
+    if (draggedIndex === -1 || draggedIndex === targetIndex) {
+      setDraggedTemplateId(null);
+      return;
+    }
+
+    // Reorder templates array
+    const newTemplates = [...templates];
+    const [draggedTemplate] = newTemplates.splice(draggedIndex, 1);
+    newTemplates.splice(targetIndex, 0, draggedTemplate);
+
+    setTemplates(newTemplates);
+    setDraggedTemplateId(null);
+
+    // Debounced save
+    if (saveOrderTimeoutRef.current) {
+      clearTimeout(saveOrderTimeoutRef.current);
+    }
+
+    saveOrderTimeoutRef.current = setTimeout(() => {
+      saveTemplateOrder(newTemplates);
+    }, 400);
+  };
+
+  const handleDragEnd = (e) => {
+    const row = e.currentTarget;
+    if (row) {
+      row.style.opacity = "1";
+    }
+    setDraggedTemplateId(null);
+    setDragOverIndex(null);
+  };
+
+  // -------------------------
+  // Save Template Order
+  // -------------------------
+  const saveTemplateOrder = async (templatesToSave = templates) => {
+    try {
+      const orders = templatesToSave.map((tpl, index) => ({
+        id: tpl.id,
+        display_order: index,
+      }));
+
+      const res = await fetch("http://localhost:3000/templates/reorder", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orders }),
+      });
+
+      if (!res.ok) throw new Error("Failed to save template order");
+
+      // Optionally refresh to ensure sync
+      // await fetchTemplates();
+    } catch (err) {
+      console.error("Error saving template order:", err);
+      // Revert to previous order on error
+      await fetchTemplates();
+    }
+  };
+
   return (
     <div className="p-6 flex flex-col gap-4">
       {/* Header */}
@@ -146,6 +270,7 @@ export default function TemplatesPage() {
           <table className="w-full text-sm text-left text-gray-700">
             <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
               <tr>
+                <th className="px-4 py-3 w-[3%]"></th>
                 <th className="px-4 py-3 w-[5%]">
                   <input
                     type="checkbox"
@@ -165,24 +290,44 @@ export default function TemplatesPage() {
               </tr>
             </thead>
             <tbody>
-              {templates.map((tpl) => (
+              {templates.map((tpl, index) => (
                 <tr
                   key={tpl.id}
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, tpl.id)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
                   className={`border-b hover:bg-gray-50 transition ${
                     selected.includes(tpl.id) ? "bg-blue-50" : ""
+                  } ${
+                    dragOverIndex === index ? "bg-blue-100 border-blue-300" : ""
+                  } ${
+                    draggedTemplateId === tpl.id ? "opacity-50" : ""
                   }`}
                 >
+                  <td className="px-2 py-3">
+                    <div 
+                      className="drag-handle cursor-move inline-block"
+                      onMouseDown={handleGripMouseDown}
+                    >
+                      <GripVertical className="h-4 w-4 text-gray-400" />
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <input
                       type="checkbox"
                       checked={selected.includes(tpl.id)}
                       onChange={() => toggleSelect(tpl.id)}
                       className="accent-blue-600 cursor-pointer"
+                      onClick={(e) => e.stopPropagation()}
                     />
                   </td>
                   <td
                     className="px-4 py-3 font-medium text-blue-700 hover:underline cursor-pointer"
                     onClick={() => handleEditTemplate(tpl)}
+                    onMouseDown={(e) => e.stopPropagation()}
                   >
                     {tpl.name}
                   </td>
