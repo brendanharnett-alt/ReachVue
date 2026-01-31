@@ -86,7 +86,7 @@ export default function EmailModal({
   const editorContainerRef = useRef(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [trackOpens, setTrackOpens] = useState(true) // Default: ON
-  const [trackClicks, setTrackClicks] = useState(false) // Default: OFF
+  const [trackClicks, setTrackClicks] = useState(true) // Default: ON
   const [localEmailSettings, setLocalEmailSettings] = useState(emailSettings) // Use prop if provided, otherwise fetch
   
   // Fetch email settings if not provided as prop
@@ -141,7 +141,7 @@ export default function EmailModal({
       editor.commands.setContent("")
       if (subjectRef.current) subjectRef.current.value = ""
       setTrackOpens(true) // Reset to defaults
-      setTrackClicks(false)
+      setTrackClicks(true) // Reset to defaults
     }
   }, [open, editor])
 
