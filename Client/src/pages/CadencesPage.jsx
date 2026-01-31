@@ -8,45 +8,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MailCheck, Eye, Edit, Play, MoreVertical, History, SkipForward, Clock, ChevronRight, ChevronDown, Trash2 } from "lucide-react";
+import { Plus, MailCheck, Eye, Edit, Play, MoreVertical, History, SkipForward, Clock, ChevronRight, ChevronDown, Trash2, Mail, Phone, Linkedin, Layers } from "lucide-react";
 import CreateCadenceModal from "@/components/modals/CreateCadenceModal";
-import { fetchCadences, createCadence, deleteCadence } from "@/api";
-
-// Mock cadence data
-const mockCadences = [
-  {
-    id: 1,
-    name: "Q1 Enterprise Outreach",
-    description: "Targeting enterprise prospects for Q1 sales cycle",
-    peopleCount: 24,
-    lastActivity: "2 days ago",
-    status: "Active",
-  },
-  {
-    id: 2,
-    name: "Follow-up Campaign",
-    description: "Re-engaging warm leads from last quarter",
-    peopleCount: 12,
-    lastActivity: "5 days ago",
-    status: "Active",
-  },
-  {
-    id: 3,
-    name: "Product Demo Follow-up",
-    description: "Following up with prospects who attended demo",
-    peopleCount: 8,
-    lastActivity: "1 week ago",
-    status: "Paused",
-  },
-  {
-    id: 4,
-    name: "New Customer Onboarding",
-    description: "Welcome sequence for new customers",
-    peopleCount: 5,
-    lastActivity: "3 days ago",
-    status: "Active",
-  },
-];
+import PostponePopover from "@/components/cadence/PostponePopover";
+import MultiActionModal from "@/components/modals/MultiActionModal";
+import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
+import CadenceActivityTimelineModal from "@/components/modals/CadenceActivityTimelineModal";
+import EmailModal from "@/components/modals/EmailModal";
+import CadenceCallModal from "@/components/modals/CadenceCallModal";
+import CadenceLinkedInModal from "@/components/modals/CadenceLinkedInModal";
+import { fetchCadences, createCadence, deleteCadence, fetchCadenceContacts, fetchCadenceSteps, fetchContacts, skipCadenceStep, postponeCadenceStep, completeCadenceStep, fetchContactCadenceSteps } from "@/api";
 
 // Check if date is past due
 function isPastDue(dateString) {
@@ -83,95 +54,159 @@ function formatDateWithOrdinal(dateString) {
   return `${month} ${day}${getOrdinal(day)}, ${year}`;
 }
 
-// Generate mock To Do items (all due/past due steps across cadences)
-const generateToDoItems = () => {
-  const today = new Date();
-  const getDateString = (daysFromToday) => {
-    const date = new Date(today);
-    date.setDate(date.getDate() + daysFromToday);
-    return date.toISOString().split("T")[0];
-  };
+// Transform cadence people data (same as CadenceDetailPage)
+function transformCadencePeople({
+  cadenceContacts,
+  allContacts,
+  cadenceStructure,
+}) {
+  const contactMap = new Map();
+  allContacts.forEach((c) => contactMap.set(c.id, c));
 
-  return [
-    {
-      id: 1,
-      cadenceId: 1,
-      cadenceName: "Q1 Enterprise Outreach",
-      company: "General Electric",
-      firstName: "John",
-      lastName: "Doe",
-      title: "VP of IT",
-      currentStep: "Step 1: Intro",
-      dueOn: getDateString(-1), // 1 day ago (past due)
-    },
-    {
-      id: 2,
-      cadenceId: 2,
-      cadenceName: "Follow-up Campaign",
-      company: "Dupont",
-      firstName: "Elton",
-      lastName: "John",
-      title: "VP, Strategic Projects",
-      currentStep: "Step 2: Multi-Action",
-      dueOn: getDateString(-2), // 2 days ago (past due)
-    },
-    {
-      id: 3,
-      cadenceId: 2,
-      cadenceName: "Follow-up Campaign",
-      company: "Acme Co",
-      firstName: "John",
-      lastName: "Kennedy",
-      title: "VP of Finance",
-      currentStep: "Step 2: Email Follow Up",
-      dueOn: getDateString(-2), // 2 days ago (past due)
-    },
-    {
-      id: 4,
-      cadenceId: 1,
-      cadenceName: "Q1 Enterprise Outreach",
-      company: "Microsoft",
-      firstName: "Jane",
-      lastName: "Smith",
-      title: "Director of Sales",
-      currentStep: "Step 3: Phone Call",
-      dueOn: getDateString(0), // Today (due)
-    },
-    {
-      id: 5,
-      cadenceId: 4,
-      cadenceName: "New Customer Onboarding",
-      company: "Amazon",
-      firstName: "Alice",
-      lastName: "Johnson",
-      title: "CTO",
-      currentStep: "Step 1: Welcome Email",
-      dueOn: getDateString(0), // Today (due)
-    },
-    {
-      id: 6,
-      cadenceId: 3,
-      cadenceName: "Product Demo Follow-up",
-      company: "Google",
-      firstName: "Bob",
-      lastName: "Williams",
-      title: "VP of Engineering",
-      currentStep: "Step 2: Follow-up Call",
-      dueOn: getDateString(-3), // 3 days ago (past due)
-    },
-  ];
-};
+  const allSteps = cadenceStructure.flatMap((d) => d.actions);
+
+  const stepByOrder = new Map();
+  allSteps.forEach((s) => {
+    stepByOrder.set(s.step_order, s);
+  });
+
+  const stepsInSequence = [...allSteps].sort((a, b) => {
+    if (a.day_number !== b.day_number) {
+      return a.day_number - b.day_number;
+    }
+    return a.step_order - b.step_order;
+  });
+
+  const firstStep = stepsInSequence[0] || null;
+
+  return cadenceContacts.map((cc) => {
+    const fullContact = contactMap.get(cc.contact_id) || {};
+
+    let currentStepOrder = null;
+    let dayNumber = cc.current_day ?? null;
+
+    if (dayNumber != null) {
+      const dayData = cadenceStructure.find((d) => d.day === dayNumber);
+      if (dayData && dayData.actions.length > 0) {
+        const sortedDaySteps = [...dayData.actions].sort(
+          (a, b) => a.step_order - b.step_order
+        );
+        currentStepOrder = sortedDaySteps[0]?.step_order ?? null;
+      }
+    }
+
+    if (currentStepOrder == null && firstStep) {
+      currentStepOrder = firstStep.step_order;
+      dayNumber = firstStep.day_number;
+    }
+
+    const step = stepByOrder.get(currentStepOrder) || null;
+
+    const daySteps =
+      dayNumber != null
+        ? cadenceStructure.find((d) => d.day === dayNumber)?.actions || []
+        : [];
+
+    const isMultiStep = cc.is_multi_step ?? (daySteps.length > 1);
+
+    let remainingSteps = null;
+    if (isMultiStep) {
+      if (cc.pending_steps_in_day != null) {
+        remainingSteps = cc.pending_steps_in_day;
+      } else if (step) {
+        const sortedDaySteps = [...daySteps].sort(
+          (a, b) => a.step_order - b.step_order
+        );
+        const idx = sortedDaySteps.findIndex(
+          (s) => s.step_order === currentStepOrder
+        );
+        if (idx !== -1) {
+          remainingSteps = sortedDaySteps.length - idx;
+        }
+      }
+    }
+
+    let overallStepNumber = null;
+    if (!isMultiStep && step) {
+      const idx = stepsInSequence.findIndex(
+        (s) =>
+          s.step_order === currentStepOrder &&
+          s.day_number === step.day_number
+      );
+      if (idx !== -1) {
+        overallStepNumber = idx + 1;
+      }
+    }
+
+    const dueOn = cc.due_on ? cc.due_on.split("T")[0] : null;
+
+    return {
+      id: cc.contact_cadence_id,
+      contactId: cc.contact_id,
+      cadenceId: cc.cadence_id,
+      cadenceName: null, // Will be set when grouping
+
+      company: fullContact.company || "—",
+      firstName: cc.first_name || "",
+      lastName: cc.last_name || "",
+      first_name: cc.first_name || "",
+      last_name: cc.last_name || "",
+      title: fullContact.title || "—",
+      email: fullContact.email || null,
+      mobile_phone: fullContact.mobile_phone || null,
+      phone: fullContact.mobile_phone || null,
+      linkedin_url: fullContact.linkedin_url || null,
+      tags: fullContact.tags || [],
+
+      currentStep: isMultiStep
+        ? "Multi-step"
+        : step?.label || "Not Started",
+
+      currentStepOrder,
+      dayNumber,
+
+      stepInfo: {
+        isMultiStep,
+        stepType: step?.type || "task",
+        remainingSteps,
+        stepName: step?.label || null,
+        dayNumber,
+        overallStepNumber,
+      },
+
+      dueOn,
+      lastStepCompletedAt: null,
+    };
+  });
+}
 
 export default function CadencesPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("todo");
-  const [groupBy, setGroupBy] = useState("none");
+  const [groupBy, setGroupBy] = useState("campaign");
   const [expandedGroups, setExpandedGroups] = useState({});
   const [createCadenceModalOpen, setCreateCadenceModalOpen] = useState(false);
   const [cadences, setCadences] = useState([]);
   const [loadingCadences, setLoadingCadences] = useState(false);
   const [selectedCadences, setSelectedCadences] = useState([]);
-  const toDoItems = generateToDoItems();
+  const [toDoItems, setToDoItems] = useState([]);
+  const [loadingToDo, setLoadingToDo] = useState(true);
+  
+  // Modal states (same as CadenceDetailPage)
+  const [multiActionModalOpen, setMultiActionModalOpen] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState(null);
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [timelineModalOpen, setTimelineModalOpen] = useState(false);
+  const [timelineContact, setTimelineContact] = useState(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailModalContact, setEmailModalContact] = useState(null);
+  const [emailModalStepData, setEmailModalStepData] = useState(null);
+  const [callModalOpen, setCallModalOpen] = useState(false);
+  const [callModalContact, setCallModalContact] = useState(null);
+  const [callModalStepData, setCallModalStepData] = useState(null);
+  const [linkedInModalOpen, setLinkedInModalOpen] = useState(false);
+  const [linkedInModalContact, setLinkedInModalContact] = useState(null);
+  const [linkedInModalStepData, setLinkedInModalStepData] = useState(null);
 
   // Fetch cadences from backend
   useEffect(() => {
@@ -188,6 +223,89 @@ export default function CadencesPage() {
     };
     loadCadences();
   }, []);
+
+  // Load to do items (people with due/past due steps)
+  const loadToDoItems = async () => {
+    setLoadingToDo(true);
+    try {
+      const allCadences = await fetchCadences();
+      const allContacts = await fetchContacts();
+      
+      // Fetch all cadence contacts and steps in parallel
+      const cadenceDataPromises = allCadences.map(async (cadence) => {
+        try {
+          const [cadenceContacts, cadenceSteps] = await Promise.all([
+            fetchCadenceContacts(cadence.id),
+            fetchCadenceSteps(cadence.id),
+          ]);
+
+          // Transform steps to match structure expected by transformCadencePeople
+          const groupedByDay = {};
+          cadenceSteps.forEach((step) => {
+            const day = step.day_number || 0;
+            if (!groupedByDay[day]) {
+              groupedByDay[day] = {
+                day,
+                actions: [],
+              };
+            }
+            groupedByDay[day].actions.push({
+              id: step.id,
+              type: step.action_type || "task",
+              label: step.step_label,
+              step_order: step.step_order,
+              day_number: step.day_number,
+              action_value: step.action_value,
+            });
+          });
+          const cadenceStructure = Object.values(groupedByDay).sort((a, b) => a.day - b.day);
+
+          // Transform contacts
+          const transformedPeople = transformCadencePeople({
+            cadenceContacts,
+            allContacts,
+            cadenceStructure,
+          });
+
+          // Filter to only include people with due or past due steps
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          const peopleWithDueSteps = transformedPeople.filter((person) => {
+            if (!person.dueOn) return false;
+            const dueDate = new Date(person.dueOn);
+            dueDate.setHours(0, 0, 0, 0);
+            return dueDate <= today; // Due today or past due
+          });
+
+            // Add cadence name and structure to each person
+            return peopleWithDueSteps.map((person) => ({
+              ...person,
+              cadenceName: cadence.name,
+              cadenceStructure: cadenceStructure, // Store structure for this person's cadence
+            }));
+        } catch (err) {
+          console.error(`Failed to load data for cadence ${cadence.id}:`, err);
+          return [];
+        }
+      });
+
+      const allToDoItems = (await Promise.all(cadenceDataPromises)).flat();
+      setToDoItems(allToDoItems);
+    } catch (err) {
+      console.error("Failed to load to do items:", err);
+      setToDoItems([]);
+    } finally {
+      setLoadingToDo(false);
+    }
+  };
+
+  // Fetch to do items when tab is active
+  useEffect(() => {
+    if (activeTab === "todo") {
+      loadToDoItems();
+    }
+  }, [activeTab]);
 
   const toggleGroupExpand = (group) =>
     setExpandedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
@@ -313,19 +431,331 @@ export default function CadencesPage() {
     }
   };
 
-  const handleSkip = (itemId, e) => {
-    e.stopPropagation();
-    console.log("Skip for item:", itemId);
+  const handleSkip = async (person, e, providedStepId = null) => {
+    if (e) e.stopPropagation();
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:725',message:'handleSkip called',data:{personId:person?.id,contactId:person?.contactId,providedStepId,currentStepOrder:person?.currentStepOrder,hasCadenceStructure:!!person?.cadenceStructure},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
+    // Use provided stepId if available, otherwise find from cadenceStructure
+    let stepId = providedStepId;
+    if (!stepId && person.currentStepOrder != null && person.cadenceStructure && person.cadenceStructure.length > 0) {
+      const allSteps = person.cadenceStructure.flatMap((day) => day.actions);
+      const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+      if (currentStep) {
+        stepId = currentStep.id;
+      }
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:733',message:'Step lookup from cadenceStructure',data:{foundStep:!!currentStep,stepId:currentStep?.id,allStepsCount:allSteps.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+    }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:740',message:'Final stepId before skip',data:{stepId,contactCadenceId:person.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
+    if (!stepId) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:743',message:'No stepId found - alerting',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      alert('Unable to determine which step to skip');
+      return;
+    }
+    
+    try {
+      await skipCadenceStep(person.id, stepId);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:750',message:'skipCadenceStep succeeded, refreshing',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      // Refresh to do items
+      await loadToDoItems();
+    } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:755',message:'skipCadenceStep failed',data:{error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      console.error("Failed to skip step:", err);
+      alert(err.message || "Failed to skip step");
+    }
   };
 
-  const handlePostpone = (itemId, e) => {
-    e.stopPropagation();
-    console.log("Postpone for item:", itemId);
+  const handlePostpone = async (person, date, providedStepId = null) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:760',message:'handlePostpone called',data:{personId:person?.id,providedStepId,date,currentStepOrder:person?.currentStepOrder},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
+    // Use provided stepId if available, otherwise find from cadenceStructure
+    let stepId = providedStepId;
+    if (!stepId && person.currentStepOrder != null && person.cadenceStructure && person.cadenceStructure.length > 0) {
+      const allSteps = person.cadenceStructure.flatMap((day) => day.actions);
+      const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+      if (currentStep) {
+        stepId = currentStep.id;
+      }
+    }
+    
+    if (!stepId) {
+      alert("Unable to determine step to postpone");
+      return;
+    }
+
+    try {
+      await postponeCadenceStep(person.id, stepId, date);
+      // Refresh to do items
+      await loadToDoItems();
+    } catch (err) {
+      console.error("Failed to postpone step:", err);
+      alert(err.message || "Failed to postpone step");
+    }
   };
 
-  const handleHistoricalActions = (itemId, e) => {
+  const handleHistoricalActions = (person, e) => {
+    if (e) e.stopPropagation();
+    // Find the person for the timeline modal
+    if (person) {
+      setTimelineContact(person);
+      setTimelineModalOpen(true);
+    }
+  };
+
+  const handleOpenMultiActionModal = (person) => {
+    setSelectedPerson(person);
+    setMultiActionModalOpen(true);
+  };
+
+  const handleExecuteAction = async (person, e) => {
     e.stopPropagation();
-    console.log("Historical actions for item:", itemId);
+    
+    // Check if this is a multi-action step
+    const isMultiStep = person.stepInfo?.isMultiStep === true;
+    
+    if (isMultiStep) {
+      // Multi-action: open modal to show all steps for the day
+      if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && person.cadenceStructure && person.cadenceStructure.length > 0) {
+        const allSteps = person.cadenceStructure.flatMap((day) => day.actions);
+        const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+        if (currentStep) {
+          // Create a person object with the correct dayNumber for the modal
+          const personWithDay = {
+            ...person,
+            dayNumber: currentStep.day_number
+          };
+          handleOpenMultiActionModal(personWithDay);
+        } else {
+          // Fallback: use person's dayNumber if available
+          if (person.dayNumber !== null && person.dayNumber !== undefined) {
+            handleOpenMultiActionModal(person);
+          }
+        }
+      } else if (person.dayNumber !== null && person.dayNumber !== undefined) {
+        handleOpenMultiActionModal(person);
+      }
+    } else {
+      // Single step: open appropriate modal based on action_type
+      if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && person.cadenceStructure && person.cadenceStructure.length > 0) {
+        const allSteps = person.cadenceStructure.flatMap((day) => day.actions);
+        const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+        
+        if (!currentStep) {
+          alert('Unable to determine which step to execute');
+          return;
+        }
+        
+        // Extract action_type and action_value from the step
+        const actionType = currentStep.type || currentStep.action_type || 'task';
+        let actionValue = currentStep.action_value || null;
+        
+        // Parse action_value if it's a string
+        if (typeof actionValue === 'string' && actionValue.trim()) {
+          try {
+            actionValue = JSON.parse(actionValue);
+          } catch (err) {
+            console.warn('Failed to parse action_value as JSON:', err);
+          }
+        }
+        
+        // Create contact object for modal
+        const contact = {
+          id: person.contactId,
+          first_name: person.firstName || person.first_name || '',
+          last_name: person.lastName || person.last_name || '',
+          email: person.email || null,
+        };
+        
+        // Open appropriate modal based on action_type
+        if (actionType === 'email') {
+          const emailSubject = actionValue?.email_subject || '';
+          const emailBody = actionValue?.email_body || '';
+          
+          setEmailModalStepData({
+            initialSubject: emailSubject,
+            initialBody: emailBody,
+            cadenceStepId: currentStep.id,
+            contactCadenceId: person.id,
+          });
+          setEmailModalContact(contact);
+          setEmailModalOpen(true);
+    } else if (actionType === 'phone' || actionType === 'call') {
+      const instructions = actionValue?.instructions || '';
+      
+      setCallModalStepData({
+        instructions: instructions,
+        cadenceStepId: currentStep.id,
+        contactCadenceId: person.id,
+      });
+      setCallModalContact(contact);
+      setCallModalOpen(true);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:683',message:'Call modal state set',data:{hasContact:!!contact,contactId:contact?.id,cadenceStepId:currentStep.id,contactCadenceId:person.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'H'})}).catch(()=>{});
+      // #endregion
+    } else if (actionType === 'linkedin') {
+      const instructions = actionValue?.instructions || '';
+      
+      setLinkedInModalStepData({
+        instructions: instructions,
+        cadenceStepId: currentStep.id,
+        contactCadenceId: person.id,
+      });
+      setLinkedInModalContact(contact);
+      setLinkedInModalOpen(true);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:620',message:'LinkedIn modal state set',data:{hasContact:!!contact,contactId:contact?.id,cadenceStepId:currentStep.id,contactCadenceId:person.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'H'})}).catch(()=>{});
+      // #endregion
+        } else {
+          alert(`Step type "${actionType}" is not yet supported for execution`);
+        }
+      } else {
+        alert('Unable to determine which step to execute');
+      }
+    }
+  };
+
+  const handleExecuteStepFromMultiAction = (person, step) => {
+    // Close MultiActionModal
+    setMultiActionModalOpen(false);
+    
+    // Find the step in cadenceStructure to get action_value
+    const allSteps = person.cadenceStructure.flatMap((day) => day.actions);
+    const cadenceStep = allSteps.find((s) => s.id === step.cadence_step_id);
+    
+    if (!cadenceStep) {
+      alert('Unable to find step details');
+      return;
+    }
+    
+    // Extract action_type and action_value
+    const actionType = step.action_type || cadenceStep.type || cadenceStep.action_type || 'task';
+    let actionValue = cadenceStep.action_value || null;
+    
+    // Parse action_value if it's a string
+    if (typeof actionValue === 'string' && actionValue.trim()) {
+      try {
+        actionValue = JSON.parse(actionValue);
+      } catch (err) {
+        console.warn('Failed to parse action_value as JSON:', err);
+      }
+    }
+    
+    // Create contact object for modal
+    const contact = {
+      id: person.contactId,
+      first_name: person.firstName || person.first_name || '',
+      last_name: person.lastName || person.last_name || '',
+      email: person.email || null,
+    };
+    
+    // Open appropriate modal based on action_type
+    if (actionType === 'email') {
+      const emailSubject = actionValue?.email_subject || '';
+      const emailBody = actionValue?.email_body || '';
+      
+      setEmailModalStepData({
+        initialSubject: emailSubject,
+        initialBody: emailBody,
+        cadenceStepId: cadenceStep.id,
+        contactCadenceId: person.id,
+      });
+      setEmailModalContact(contact);
+      setEmailModalOpen(true);
+    } else if (actionType === 'phone' || actionType === 'call') {
+      const instructions = actionValue?.instructions || '';
+      
+      setCallModalStepData({
+        instructions: instructions,
+        cadenceStepId: cadenceStep.id,
+        contactCadenceId: person.id,
+      });
+      setCallModalContact(contact);
+      setCallModalOpen(true);
+    } else if (actionType === 'linkedin') {
+      const instructions = actionValue?.instructions || '';
+      
+      setLinkedInModalStepData({
+        instructions: instructions,
+        cadenceStepId: cadenceStep.id,
+        contactCadenceId: person.id,
+      });
+      setLinkedInModalContact(contact);
+      setLinkedInModalOpen(true);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:622',message:'LinkedIn modal state set from multi-action',data:{hasContact:!!contact,contactId:contact?.id,cadenceStepId:cadenceStep.id,contactCadenceId:person.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'H'})}).catch(()=>{});
+      // #endregion
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:655',message:'LinkedIn modal state set from multi-action',data:{hasContact:!!contact,contactId:contact?.id,cadenceStepId:cadenceStep.id,contactCadenceId:person.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'H'})}).catch(()=>{});
+      // #endregion
+    } else {
+      alert(`Step type "${actionType}" is not yet supported for execution`);
+    }
+  };
+
+  const handleCompleteStep = async (contactCadenceId, cadenceStepId) => {
+    try {
+      await completeCadenceStep(contactCadenceId, cadenceStepId);
+      // Refresh to do items
+      await loadToDoItems();
+    } catch (err) {
+      console.error("Failed to complete step:", err);
+      throw err;
+    }
+  };
+
+  const handleStepTextClick = async (person, e) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    // Check if this is a multi-action step
+    const isMultiStep = person.stepInfo?.isMultiStep === true;
+    
+    if (isMultiStep) {
+      // Multi-action: open modal to show all steps for the day
+      if (person.currentStepOrder !== null && person.currentStepOrder !== undefined && person.cadenceStructure && person.cadenceStructure.length > 0) {
+        const allSteps = person.cadenceStructure.flatMap((day) => day.actions);
+        const currentStep = allSteps.find((s) => s.step_order === person.currentStepOrder);
+        if (currentStep) {
+          // Create a person object with the correct dayNumber for the modal
+          const personWithDay = {
+            ...person,
+            dayNumber: currentStep.day_number
+          };
+          handleOpenMultiActionModal(personWithDay);
+        } else {
+          // Fallback: use person's dayNumber if available
+          if (person.dayNumber !== null && person.dayNumber !== undefined) {
+            handleOpenMultiActionModal(person);
+          }
+        }
+      } else if (person.dayNumber !== null && person.dayNumber !== undefined) {
+        handleOpenMultiActionModal(person);
+      }
+    }
+    // Single step: do nothing when clicking step name
+  };
+
+  const handleLinkedInClick = (person, e) => {
+    e.stopPropagation();
+    if (person.linkedin_url) {
+      window.open(person.linkedin_url, "_blank");
+    }
   };
 
   return (
@@ -373,7 +803,12 @@ export default function CadencesPage() {
 
       {/* To Do Tab Content */}
       {activeTab === "todo" && (
-        <div className="border rounded-lg bg-white shadow-sm overflow-hidden">
+        <div className="flex w-full">
+        <div
+          className={`border rounded-lg bg-white shadow-sm overflow-x-auto ${
+            selectedContact ? "w-2/3" : "w-full"
+          }`}
+        >
           {/* Group by Dropdown */}
           <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-start">
             <DropdownMenu>
@@ -393,71 +828,139 @@ export default function CadencesPage() {
             </DropdownMenu>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left text-gray-700">
-              <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
-                <tr>
-                  <th className="px-4 py-3 text-left">Company</th>
-                  <th className="px-4 py-3 text-left">Full Name</th>
-                  <th className="px-4 py-3 text-left">Title</th>
-                  <th className="px-4 py-3 text-left">Current Step</th>
-                  <th className="px-4 py-3 text-left">Actions</th>
-                  <th className="px-4 py-3 text-left">Due on</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(groupedItems).map(([group, rows]) => (
-                  <React.Fragment key={group}>
-                    {groupBy !== "none" && (
-                      <tr
-                        className="bg-gray-100 font-semibold cursor-pointer"
-                        onClick={() => toggleGroupExpand(group)}
-                      >
-                        <td className="p-2">
-                          {expandedGroups[group] ? (
-                            <ChevronDown className="h-4 w-4 inline" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 inline" />
-                          )}
-                        </td>
-                        <td className="p-2 text-blue-700" colSpan={1}>
-                          {group}{" "}
-                          <span className="text-gray-500 text-sm">
-                            ({rows.length})
-                          </span>
-                        </td>
-                        <td colSpan={5}></td>
-                      </tr>
-                    )}
+            {loadingToDo ? (
+              <div className="p-8 text-center text-gray-500">
+                Loading to do items...
+              </div>
+            ) : toDoItems.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                No items due or past due.
+              </div>
+            ) : (
+              <table className="w-full text-sm text-left text-gray-700">
+                <thead className="bg-gray-100 border-b text-gray-600 text-xs uppercase">
+                  <tr>
+                    <th className="p-2 pl-4 text-left font-medium">Company</th>
+                    <th className="p-2 text-left font-medium">Full Name</th>
+                    <th className="p-2 text-left font-medium">Current Step</th>
+                    <th className="p-2 text-left font-medium">Actions</th>
+                    <th className="p-2 text-left font-medium w-24">Due on</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(groupedItems).map(([group, rows]) => (
+                    <React.Fragment key={group}>
+                      {groupBy !== "none" && (
+                        <tr
+                          className="bg-gray-100 font-semibold cursor-pointer"
+                          onClick={() => toggleGroupExpand(group)}
+                        >
+                          <td className="p-2 pl-4">
+                            {expandedGroups[group] ? (
+                              <ChevronDown className="h-4 w-4 inline" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 inline" />
+                            )}
+                          </td>
+                          <td className="p-2 text-blue-700" colSpan={1}>
+                            {group}{" "}
+                            <span className="text-gray-500 text-sm">
+                              ({rows.length})
+                            </span>
+                          </td>
+                          <td colSpan={3}></td>
+                        </tr>
+                      )}
 
-                    {(groupBy === "none" || expandedGroups[group]) &&
-                      rows.map((item) => {
-                        const pastDue = isPastDue(item.dueOn);
-                        return (
-                          <tr
-                            key={item.id}
-                            className="border-b hover:bg-gray-50 transition group cursor-pointer"
-                            onClick={() => handleToDoRowClick(item.cadenceId)}
-                          >
-                            <td className="px-4 py-3 font-medium text-gray-900">
-                              {item.company}
-                            </td>
-                            <td className="px-4 py-3 text-gray-700">
-                              {item.firstName} {item.lastName}
-                            </td>
-                            <td className="px-4 py-3 text-gray-600">{item.title}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-start">
-                                <div className="w-6 flex items-center justify-start flex-shrink-0 mt-0.5">
+                      {(groupBy === "none" || expandedGroups[group]) &&
+                        rows.map((person) => {
+                          const pastDue = isPastDue(person.dueOn);
+                          return (
+                            <tr
+                              key={person.id}
+                              className="border-b hover:bg-gray-50 transition group"
+                            >
+                              <td className="p-2 pl-4 font-medium text-gray-900 truncate max-w-[140px]">
+                                {person.company}
+                              </td>
+                              <td className="p-2 text-gray-700">
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className="cursor-pointer hover:text-blue-600 hover:underline truncate max-w-[140px]"
+                                      onClick={() => setSelectedContact(person)}
+                                    >
+                                      {person.firstName} {person.lastName}
+                                    </span>
+                                    {person.linkedin_url && (
+                                      <button
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity h-3.5 w-3.5 rounded-sm bg-[#0077B5] flex items-center justify-center hover:bg-[#006399]"
+                                        onClick={(e) => handleLinkedInClick(person, e)}
+                                        title="Open LinkedIn Profile"
+                                      >
+                                        <span className="text-[8px] font-bold text-white leading-none">in</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                  {person.title && (
+                                    <span className="text-xs text-gray-600 truncate max-w-[160px]">
+                                      {person.title}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-2">
+                                <div className="flex flex-col gap-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    {person.stepInfo?.isMultiStep ? (
+                                      <Layers className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                                    ) : person.stepInfo?.stepType ? (
+                                      (() => {
+                                        const stepType = person.stepInfo.stepType.toLowerCase();
+                                        if (stepType === "email") {
+                                          return <Mail className="h-4 w-4 text-gray-500 flex-shrink-0" />;
+                                        } else if (stepType === "phone" || stepType === "call") {
+                                          return <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />;
+                                        } else if (stepType === "linkedin") {
+                                          return <Linkedin className="h-4 w-4 text-gray-500 flex-shrink-0" />;
+                                        } else {
+                                          return <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />;
+                                        }
+                                      })()
+                                    ) : null}
+                                    <span
+                                      className={`text-gray-700 ${
+                                        person.stepInfo?.isMultiStep 
+                                          ? "cursor-pointer hover:text-gray-900" 
+                                          : ""
+                                      }`}
+                                      onClick={(e) => handleStepTextClick(person, e)}
+                                    >
+                                      {person.currentStep}
+                                    </span>
+                                  </div>
+                                  {person.stepInfo?.dayNumber !== null && person.stepInfo?.dayNumber !== undefined && (
+                                    <span className="text-xs text-gray-500">
+                                      {person.stepInfo.isMultiStep ? (
+                                        `Day ${person.stepInfo.dayNumber}: ${person.stepInfo.remainingSteps || 0} remaining steps`
+                                      ) : person.stepInfo.overallStepNumber ? (
+                                        `Day ${person.stepInfo.dayNumber}: Step ${person.stepInfo.overallStepNumber}`
+                                      ) : (
+                                        `Day ${person.stepInfo.dayNumber}`
+                                      )}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-2">
+                                <div className="flex items-center gap-2">
                                   <button
                                     className={`h-6 w-6 rounded-full flex items-center justify-center transition-all ${
                                       pastDue
                                         ? "bg-gray-200 hover:bg-gray-300"
                                         : "border border-gray-300 bg-transparent hover:border-gray-400"
                                     }`}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      console.log("Execute action for item:", item.id);
-                                    }}
+                                    onClick={(e) => handleExecuteAction(person, e)}
                                   >
                                     <Play
                                       className={`h-3 w-3 ${
@@ -467,65 +970,59 @@ export default function CadencesPage() {
                                       }`}
                                     />
                                   </button>
-                                </div>
-                                <div className="ml-2 flex flex-col">
-                                  <span className="text-gray-700">{item.currentStep}</span>
-                                  <span className="text-xs text-gray-400 mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 w-fit">
-                                    {item.cadenceName}
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center justify-start">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
+                                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
-                                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
-                                      onClick={(e) => e.stopPropagation()}
+                                      className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                      onClick={(e) => handleHistoricalActions(person, e)}
+                                      title="View History"
                                     >
-                                      <MoreVertical className="h-4 w-4 text-gray-500" />
+                                      <History className="h-4 w-4" />
                                     </button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="start">
-                                    <DropdownMenuItem
-                                      onClick={(e) => handleHistoricalActions(item.id, e)}
+                                    <button
+                                      className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                      onClick={(e) => handleSkip(person, e)}
+                                      title="Skip Step"
                                     >
-                                      <History className="h-4 w-4 mr-2" />
-                                      View History
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={(e) => handleSkip(item.id, e)}
-                                    >
-                                      <SkipForward className="h-4 w-4 mr-2" />
-                                      Skip Step
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={(e) => handlePostpone(item.id, e)}
-                                    >
-                                      <Clock className="h-4 w-4 mr-2" />
-                                      Postpone
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            </td>
-                            <td
-                              className={`px-4 py-3 font-medium ${
-                                pastDue ? "text-red-600" : "text-green-600"
-                              }`}
-                            >
-                              {formatDateWithOrdinal(item.dueOn)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
+                                      <SkipForward className="h-4 w-4" />
+                                    </button>
+                                    <PostponePopover
+                                      onConfirm={async (date) => {
+                                        await handlePostpone(person, date);
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="p-2 w-24">
+                                <span
+                                  className={`inline-block px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${
+                                    pastDue
+                                      ? "bg-red-100 text-red-800"
+                                      : "bg-green-100 text-green-800"
+                                  }`}
+                                >
+                                  {formatDateWithOrdinal(person.dueOn)}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
+
+        {/* Contact Panel */}
+        {selectedContact && (
+          <CadenceContactPanel
+            contact={selectedContact}
+            onClose={() => setSelectedContact(null)}
+          />
+        )}
+      </div>
       )}
 
       {/* Cadences Tab Content */}
@@ -653,6 +1150,170 @@ export default function CadencesPage() {
         onClose={() => setCreateCadenceModalOpen(false)}
         onSuccess={handleCadenceCreated}
       />
+
+      {/* Multi-Action Modal */}
+      {selectedPerson && (
+        <MultiActionModal
+          open={multiActionModalOpen}
+          onOpenChange={(open) => {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:1122',message:'MultiActionModal onOpenChange called',data:{open,hasSelectedPerson:!!selectedPerson,selectedPersonId:selectedPerson?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+            if (!open) {
+              setMultiActionModalOpen(false);
+              setSelectedPerson(null);
+            }
+          }}
+          person={selectedPerson}
+          cadenceId={selectedPerson.cadenceId}
+          onCompleteStep={handleCompleteStep}
+          onSkipStep={async (contactCadenceId, cadenceStepId) => {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:1129',message:'onSkipStep called from MultiActionModal',data:{contactCadenceId,cadenceStepId,toDoItemsCount:toDoItems.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
+            const person = toDoItems.find(p => p.id === contactCadenceId);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:1132',message:'Person lookup result',data:{foundPerson:!!person,personId:person?.id,personCadenceId:person?.cadenceId,hasCadenceStructure:!!person?.cadenceStructure},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
+            if (person) {
+              await handleSkip(person, null, cadenceStepId);
+            } else {
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:1136',message:'Person not found in toDoItems',data:{contactCadenceId,toDoItemIds:toDoItems.map(p => p.id)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+              // #endregion
+            }
+          }}
+          onPostponeStep={async (contactCadenceId, cadenceStepId, date) => {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:1135',message:'onPostponeStep called from MultiActionModal',data:{contactCadenceId,cadenceStepId,date},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+            const person = toDoItems.find(p => p.id === contactCadenceId);
+            if (person) {
+              await handlePostpone(person, date, cadenceStepId);
+            }
+          }}
+          onViewHistory={(contactCadenceId) => {
+            const person = toDoItems.find(p => p.id === contactCadenceId);
+            if (person) {
+              handleHistoricalActions(person, null);
+            }
+          }}
+          onExecuteStep={handleExecuteStepFromMultiAction}
+          cadenceStructure={selectedPerson.cadenceStructure}
+        />
+      )}
+
+      {/* Timeline Modal */}
+      {timelineContact && (
+        <CadenceActivityTimelineModal
+          open={timelineModalOpen}
+          onClose={() => {
+            setTimelineModalOpen(false);
+            setTimelineContact(null);
+          }}
+          contact={timelineContact}
+        />
+      )}
+
+      {/* Email Modal */}
+      <EmailModal
+        open={emailModalOpen}
+        contact={emailModalContact}
+        onClose={() => {
+          setEmailModalOpen(false);
+          setEmailModalContact(null);
+          setEmailModalStepData(null);
+        }}
+        onSend={({ contactId, lastTouched }) => {
+          // Handle email sent - refresh to do items
+          loadToDoItems();
+        }}
+        initialSubject={emailModalStepData?.initialSubject || ""}
+        initialBody={emailModalStepData?.initialBody || ""}
+        cadenceId={emailModalContact ? toDoItems.find(p => p.contactId === emailModalContact.id)?.cadenceId : null}
+        onCompleteStep={
+          emailModalStepData?.cadenceStepId && emailModalStepData?.contactCadenceId
+            ? () => handleCompleteStep(
+                emailModalStepData.contactCadenceId,
+                emailModalStepData.cadenceStepId
+              )
+            : null
+        }
+      />
+
+      {/* Call Modal */}
+      {callModalContact && (
+        <CadenceCallModal
+          isOpen={callModalOpen}
+          onClose={() => {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:1235',message:'Call modal onClose called',data:{hasStepData:!!callModalStepData},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'E'})}).catch(()=>{});
+            // #endregion
+            setCallModalOpen(false);
+            setCallModalContact(null);
+            setCallModalStepData(null);
+          }}
+          contact={callModalContact}
+          instructions={callModalStepData?.instructions || ""}
+          cadenceId={callModalContact ? toDoItems.find(p => p.contactId === callModalContact.id)?.cadenceId : null}
+          onSuccess={() => {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:1243',message:'Call modal onSuccess called',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'E'})}).catch(()=>{});
+            // #endregion
+            loadToDoItems();
+          }}
+          onCompleteStep={
+            callModalStepData?.cadenceStepId && callModalStepData?.contactCadenceId
+              ? () => {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:1248',message:'Call modal onCompleteStep called',data:{contactCadenceId:callModalStepData.contactCadenceId,cadenceStepId:callModalStepData.cadenceStepId},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'E'})}).catch(()=>{});
+                  // #endregion
+                  return handleCompleteStep(
+                    callModalStepData.contactCadenceId,
+                    callModalStepData.cadenceStepId
+                  );
+                }
+              : null
+          }
+        />
+      )}
+
+      {/* LinkedIn Modal */}
+      {linkedInModalContact && (
+        <CadenceLinkedInModal
+          isOpen={linkedInModalOpen}
+          onClose={() => {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:1260',message:'LinkedIn modal onClose called',data:{hasStepData:!!linkedInModalStepData},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+            // #endregion
+            setLinkedInModalOpen(false);
+            setLinkedInModalContact(null);
+            setLinkedInModalStepData(null);
+          }}
+          contact={linkedInModalContact}
+          instructions={linkedInModalStepData?.instructions || ""}
+          cadenceId={linkedInModalContact ? toDoItems.find(p => p.contactId === linkedInModalContact.id)?.cadenceId : null}
+          onSuccess={() => {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:1268',message:'LinkedIn modal onSuccess called',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+            // #endregion
+            loadToDoItems();
+          }}
+          onCompleteStep={
+            linkedInModalStepData?.cadenceStepId && linkedInModalStepData?.contactCadenceId
+              ? () => {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadencesPage.jsx:1273',message:'LinkedIn modal onCompleteStep called',data:{contactCadenceId:linkedInModalStepData.contactCadenceId,cadenceStepId:linkedInModalStepData.cadenceStepId},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+                  // #endregion
+                  return handleCompleteStep(
+                    linkedInModalStepData.contactCadenceId,
+                    linkedInModalStepData.cadenceStepId
+                  );
+                }
+              : null
+          }
+        />
+      )}
     </div>
   );
 }
