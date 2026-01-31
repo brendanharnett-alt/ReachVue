@@ -3,6 +3,19 @@ import { Button } from "@/components/ui/button";
 import { Plus, FileText, Trash2 } from "lucide-react";
 import TemplateModal from "@/components/modals/TemplateModal";
 
+// Helper to strip HTML tags for preview
+function stripHtml(html) {
+  if (!html) return "";
+
+  let text = html.replace(/<[^>]+>/g, " ");
+
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = text;
+  let decoded = textarea.value;
+
+  return decoded.replace(/\s+/g, " ").trim();
+}
+
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState([]);
   const [selected, setSelected] = useState([]);
@@ -145,10 +158,10 @@ export default function TemplatesPage() {
                   />
                 </th>
                 <th className="px-4 py-3 w-[25%]">Name</th>
-                <th className="px-4 py-3 w-[25%]">Subject</th>
+                <th className="px-4 py-3 w-[35%]">Subject</th>
                 <th className="px-4 py-3 w-[10%]">Type</th>
                 <th className="px-4 py-3 w-[15%]">Last Updated</th>
-                <th className="px-4 py-3 w-[20%]">Preview</th>
+                <th className="px-4 py-3 w-[15%]">Preview</th>
               </tr>
             </thead>
             <tbody>
@@ -184,8 +197,8 @@ export default function TemplatesPage() {
                       ? new Date(tpl.updated_at).toLocaleDateString()
                       : "—"}
                   </td>
-                  <td className="px-4 py-3 text-gray-700 whitespace-pre-line line-clamp-2">
-                    {tpl.body}
+                  <td className="px-4 py-3 text-gray-700 line-clamp-2">
+                    {stripHtml(tpl.body)}
                   </td>
                 </tr>
               ))}
