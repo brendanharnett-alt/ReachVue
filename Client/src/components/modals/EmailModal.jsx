@@ -81,6 +81,7 @@ export default function EmailModal({
   // #endregion
   
   const subjectRef = useRef(null)
+  const editorContainerRef = useRef(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [trackOpens, setTrackOpens] = useState(true) // Default: ON
   const [trackClicks, setTrackClicks] = useState(false) // Default: OFF
@@ -240,6 +241,33 @@ export default function EmailModal({
     }
 
     return tempDiv.innerHTML
+  }
+
+  // Force inline text colors on leaf elements for Word and Outlook compatibility
+  const inlineColorsForWordAndOutlook = (root) => {
+    const walker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_TEXT,
+      null
+    )
+
+    let textNode
+    while ((textNode = walker.nextNode())) {
+      const parent = textNode.parentElement
+      if (!parent) continue
+
+      const style = window.getComputedStyle(parent)
+      if (!style) continue
+
+      const color = style.color
+      if (
+        color &&
+        color !== "rgb(0, 0, 0)" &&
+        color !== "rgba(0, 0, 0, 1)"
+      ) {
+        parent.style.color = color
+      }
+    }
   }
 
   const handleSend = async () => {
@@ -567,7 +595,7 @@ export default function EmailModal({
             </TooltipProvider>
 
             {/* Editor */}
-            <div className="border rounded-md bg-white h-[250px] overflow-y-auto p-2">
+            <div ref={editorContainerRef} className="border rounded-md bg-white h-[250px] overflow-y-auto p-2">
               <EditorContent
                 editor={editor}
                 className="prose max-w-none focus:outline-none h-full"
