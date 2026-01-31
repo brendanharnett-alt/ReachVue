@@ -26,6 +26,8 @@ import {
   Copy,
   Trash2,
   Layers,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import MultiActionModal from "@/components/modals/MultiActionModal";
 import CadenceContactPanel from "@/components/panels/CadenceContactPanel";
@@ -231,6 +233,8 @@ export default function CadenceDetailPage() {
   const [historyData, setHistoryData] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [historyFilter, setHistoryFilter] = useState("all"); // "all" | "in_cadence" | "not_in_cadence"
+  const [historySortColumn, setHistorySortColumn] = useState(null); // "lastStepCompletedAt"
+  const [historySortDirection, setHistorySortDirection] = useState("asc"); // "asc" | "desc"
   const [multiActionModalOpen, setMultiActionModalOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [selectedContact, setSelectedContact] = useState(null);
@@ -518,6 +522,59 @@ export default function CadenceDetailPage() {
     
     loadHistoryData();
   }, [activeTab, cadenceId, cadenceStructure]);
+
+  // Sort and filter history data
+  const sortedHistoryData = useMemo(() => {
+    let filtered = historyData.filter(item => {
+      if (historyFilter === "all") return true;
+      return item.status === historyFilter;
+    });
+
+    if (historySortColumn === "lastStepCompletedAt") {
+      filtered = [...filtered].sort((a, b) => {
+        const aValue = a.lastStepCompletedAt ? new Date(a.lastStepCompletedAt).getTime() : 0;
+        const bValue = b.lastStepCompletedAt ? new Date(b.lastStepCompletedAt).getTime() : 0;
+        if (historySortDirection === "asc") {
+          return aValue - bValue;
+        } else {
+          return bValue - aValue;
+        }
+      });
+    }
+
+    return filtered;
+  }, [historyData, historyFilter, historySortColumn, historySortDirection]);
+
+  // Handle sort function for history tab
+  const handleHistorySort = (column) => {
+    if (historySortColumn === column) {
+      setHistorySortDirection(historySortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setHistorySortColumn(column);
+      setHistorySortDirection("asc");
+    }
+  };
+
+  // Sort indicator component for history tab
+  const HistorySortIndicator = ({ column }) => {
+    if (historySortColumn !== column) {
+      return (
+        <span className="inline-flex flex-col ml-1 opacity-40">
+          <ChevronUp className="h-3 w-3 -mb-1" />
+          <ChevronDown className="h-3 w-3" />
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex ml-1">
+        {historySortDirection === "asc" ? (
+          <ChevronUp className="h-3 w-3" />
+        ) : (
+          <ChevronDown className="h-3 w-3" />
+        )}
+      </span>
+    );
+  };
 
   // Get real actions for multi-action steps from cadence structure
   const getMultiActions = (person) => {
@@ -1438,20 +1495,7 @@ export default function CadenceDetailPage() {
               : "text-gray-500 hover:text-gray-700"
           }`}
         >
-          People
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab("structure");
-            navigate(`/cadences/${cadenceId}?tab=structure`, { replace: true });
-          }}
-          className={`pb-2 px-1 text-sm font-medium transition-colors ${
-            activeTab === "structure"
-              ? "text-blue-600 border-b-2 border-blue-600"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          Cadence Structure
+          Active People
         </button>
         <button
           onClick={() => {
@@ -1465,6 +1509,19 @@ export default function CadenceDetailPage() {
           }`}
         >
           History
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab("structure");
+            navigate(`/cadences/${cadenceId}?tab=structure`, { replace: true });
+          }}
+          className={`pb-2 px-1 text-sm font-medium transition-colors ${
+            activeTab === "structure"
+              ? "text-blue-600 border-b-2 border-blue-600"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Cadence Structure
         </button>
       </div>
 
@@ -1816,17 +1873,20 @@ export default function CadenceDetailPage() {
                     <th className="px-4 py-3 text-left font-medium">Company</th>
                     <th className="px-4 py-3 text-left font-medium">Full Name</th>
                     <th className="px-4 py-3 text-left font-medium">Last Step Action</th>
-                    <th className="px-4 py-3 text-left font-medium">Date of Last Step Completion</th>
+                    <th 
+                      className="px-4 py-3 text-left font-medium cursor-pointer hover:bg-gray-200 select-none"
+                      onClick={() => handleHistorySort("lastStepCompletedAt")}
+                    >
+                      <div className="flex items-center">
+                        Date of Last Step Completion
+                        <HistorySortIndicator column="lastStepCompletedAt" />
+                      </div>
+                    </th>
                     <th className="px-4 py-3 text-left font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {historyData
-                    .filter(item => {
-                      if (historyFilter === "all") return true;
-                      return item.status === historyFilter;
-                    })
-                    .map((item) => (
+                  {sortedHistoryData.map((item) => (
                       <tr
                         key={item.contactId}
                         className="border-b hover:bg-gray-50 transition"
@@ -1907,18 +1967,15 @@ export default function CadenceDetailPage() {
                         </td>
                       </tr>
                     ))}
-                  {historyData.filter(item => {
-                    if (historyFilter === "all") return true;
-                    return item.status === historyFilter;
-                  }).length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                        No history data found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                    {sortedHistoryData.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                          No history data found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
             )}
           </div>
         </div>
