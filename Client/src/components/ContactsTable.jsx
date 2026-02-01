@@ -8,6 +8,7 @@ import { FilterModal } from "./filters/FilterModal"
 import { TagFilterModal } from "./filters/TagFilterModal"
 import { LastTouchFilterModal } from "./filters/LastTouchFilterModal"
 import TagModal from "./modals/TagModal"
+import AddContactsToCadencesModal from "./modals/AddContactsToCadencesModal"
 
 import {
   DropdownMenu,
@@ -50,6 +51,7 @@ import {
   X,
   Plus,
   Minus,
+  List,
 } from "lucide-react"
 import ContactSidebar from "./ContactSidebar"
 import AddContactMenu from "./AddContactMenu"
@@ -759,6 +761,7 @@ export default function ContactsTable() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false)
   const [showTagModal, setShowTagModal] = useState(false)
+  const [showAddToCadenceModal, setShowAddToCadenceModal] = useState(false)
   const [groupBy, setGroupBy] = useState("none")
   const [expandedGroups, setExpandedGroups] = useState({})
   const [selectedContact, setSelectedContact] = useState(null)
@@ -1617,6 +1620,15 @@ export default function ContactsTable() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setShowAddToCadenceModal(true)}
+              className="flex items-center gap-2"
+            >
+              <List className="h-4 w-4" />
+              Cadence Add
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               className="flex items-center gap-2"
               onClick={() => {
                 // Placeholder for Export CSV
@@ -2086,6 +2098,14 @@ export default function ContactsTable() {
         open={showTagModal}
         onClose={() => setShowTagModal(false)}
         selectedContacts={selectedContacts}
+      />
+
+      {/* Add to Cadences */}
+      <AddContactsToCadencesModal
+        open={showAddToCadenceModal}
+        onClose={() => setShowAddToCadenceModal(false)}
+        selectedContacts={selectedContacts}
+        contacts={contacts}
       />
     </div>
   )
