@@ -51,9 +51,24 @@ function formatDateWithOrdinal(dateString) {
   return `${month} ${day}${getOrdinal(day)}, ${year} · ${hours}`
 }
 
+// Format short date/time for last activity: "Nov 19, 6:23 PM"
+function formatShortDateTime(dateString) {
+  if (!dateString) return null
+  const date = new Date(dateString)
+  const month = date.toLocaleString("en-US", { month: "short" })
+  const day = date.getDate()
+  const time = date.toLocaleString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+  return `${month} ${day}, ${time}`
+}
+
 export default function TouchDetailsModal({ open, onClose, touch }) {
   const [emailActivity, setEmailActivity] = useState(null)
   const [loadingActivity, setLoadingActivity] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
 
   useEffect(() => {
     if (!open || !touch || touch.touch_type !== "email" || !touch.email_id) {
@@ -81,11 +96,22 @@ export default function TouchDetailsModal({ open, onClose, touch }) {
     fetchActivity()
   }, [open, touch])
 
+  useEffect(() => {
+    if (!open) {
+      setIsExpanded(false)
+    }
+  }, [open])
+
   if (!touch) return null
 
   const isEmailTouch = touch.touch_type === "email"
   const openCount = emailActivity?.openCount ?? (isEmailTouch ? touch.open_count ?? 0 : null)
   const clickCount = emailActivity?.clickCount ?? (isEmailTouch ? touch.click_count ?? 0 : null)
+  const lastActivity = emailActivity?.lastActivityAt ? formatShortDateTime(emailActivity.lastActivityAt) : null
+
+  const hasBody = !!touch.body
+  const plainText = hasBody ? stripHtml(touch.body) : ""
+  const isLong = plainText.length > 260
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -119,67 +145,93 @@ export default function TouchDetailsModal({ open, onClose, touch }) {
             </div>
           </div>
 
-          {/* Touch Type */}
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 capitalize">
-                {touch.touch_type || "touch"}
-              </span>
-            </div>
-
-            {/* Email Activity (for email touches) */}
-            {isEmailTouch && (
-              <div className="flex items-center gap-4 mt-3 text-sm text-gray-600">
-                <div className="flex items-center gap-1">
-                  <Eye className="h-4 w-4" />
-                  <span>
-                    <span className="font-medium">Opens:</span> {openCount !== null ? openCount : "—"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <MousePointerClick className="h-4 w-4" />
-                  <span>
-                    <span className="font-medium">Clicks:</span> {clickCount !== null ? clickCount : "—"}
-                  </span>
-                </div>
+          {/* Touch Details Card - Condensed */}
+          <div className="rounded-lg border p-3 shadow-sm bg-white w-full overflow-hidden break-words">
+            {/* HEADER + EMAIL ACTIVITY METADATA */}
+            <div className="flex justify-between items-start mb-2">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-gray-600">
+                  {formatDateWithOrdinal(touch.touched_at)}
+                </span>
+                {/* EMAIL ACTIVITY METADATA */}
+                {isEmailTouch && (
+                  <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                    <div className="flex items-center gap-0.5">
+                      <Eye size={11} />
+                      <span>{openCount !== null ? openCount : "—"}</span>
+                    </div>
+                    <span className="text-gray-300">·</span>
+                    <div className="flex items-center gap-0.5">
+                      <MousePointerClick size={11} />
+                      <span>{clickCount !== null ? clickCount : "—"}</span>
+                    </div>
+                    {lastActivity && (
+                      <>
+                        <span className="text-gray-300">·</span>
+                        <div className="flex items-center gap-0.5">
+                          <Clock size={11} />
+                          <span>{lastActivity}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-
-          {/* Subject (for email touches) */}
-          {isEmailTouch && touch.subject && (
-            <div className="border rounded-lg p-4">
-              <h3 className="font-semibold text-sm mb-2">Subject</h3>
-              <p className="text-sm">{touch.subject}</p>
             </div>
-          )}
 
-          {/* Message Body */}
-          <div className="border rounded-lg p-4">
-            <h3 className="font-semibold text-sm mb-2">Message</h3>
-            {touch.body ? (
-              <div className="text-sm">
-                <div
-                  className="whitespace-pre-wrap break-words"
-                  dangerouslySetInnerHTML={{ __html: touch.body }}
-                />
+            {/* TOUCH TYPE TAG */}
+            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 capitalize">
+              {touch.touch_type || "touch"}
+            </span>
+
+            {/* SUBJECT */}
+            {touch.subject && (
+              <p className="font-semibold text-sm break-words mt-2">{touch.subject}</p>
+            )}
+
+            {/* BODY */}
+            {hasBody ? (
+              <div className="mt-1 text-sm text-gray-800">
+                {!isExpanded ? (
+                  <>
+                    <p className="whitespace-pre-wrap break-words max-h-20 overflow-hidden">
+                      {plainText.slice(0, 260)}
+                      {isLong ? "…" : ""}
+                    </p>
+                    {isLong && (
+                      <button
+                        type="button"
+                        onClick={() => setIsExpanded(true)}
+                        className="mt-1 text-xs font-medium text-blue-600 hover:underline"
+                      >
+                        Expand message
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="border rounded-md p-2 max-h-64 overflow-y-auto bg-gray-50">
+                      <div
+                        className="whitespace-pre-wrap break-words"
+                        dangerouslySetInnerHTML={{ __html: touch.body }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsExpanded(false)}
+                      className="mt-1 text-xs font-medium text-blue-600 hover:underline"
+                    >
+                      Collapse
+                    </button>
+                  </>
+                )}
               </div>
             ) : (
-              <p className="text-sm text-gray-500 italic">(No message body recorded for this touch.)</p>
+              <p className="mt-1 text-sm text-gray-500 italic">
+                (No message body recorded for this touch.)
+              </p>
             )}
           </div>
-
-          {/* Metadata */}
-          {touch.metadata && (
-            <div className="border rounded-lg p-4">
-              <h3 className="font-semibold text-sm mb-2">Metadata</h3>
-              <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto">
-                {typeof touch.metadata === 'string' 
-                  ? JSON.stringify(JSON.parse(touch.metadata), null, 2)
-                  : JSON.stringify(touch.metadata, null, 2)}
-              </pre>
-            </div>
-          )}
         </div>
 
         <DialogFooter>
