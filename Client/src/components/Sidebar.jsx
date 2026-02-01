@@ -1,12 +1,13 @@
 import React from "react";
 import logo from "../assets/DarkLogo.png";
-import { User, MailCheck, FileText, Settings } from "lucide-react";
+import { User, MailCheck, FileText, Settings, Activity } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 const navItems = [
   { label: "Contacts", icon: <User size={18} />, href: "/" },
   { label: "Cadence", icon: <MailCheck size={18} />, href: "/cadences" },
   { label: "Templates", icon: <FileText size={18} />, href: "/templates" },
+  { label: "Activity", icon: <Activity size={18} />, href: "/activity" },
   { label: "Settings", icon: <Settings size={18} />, href: "/settings" },
 ];
 

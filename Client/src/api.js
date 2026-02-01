@@ -126,6 +126,17 @@ export async function fetchTouches(contactId) {
   }
 }
 
+export async function fetchAllTouches(limit = 1000, offset = 0) {
+  try {
+    const res = await fetch(`${BASE_URL}/touches/all?limit=${limit}&offset=${offset}`)
+    if (!res.ok) throw new Error("Failed to fetch all touches")
+    return await res.json()
+  } catch (err) {
+    console.error("Fetch all touches error:", err)
+    return { touches: [], total: 0, offset: 0, limit: 1000, hasOlder: false, hasNewer: false }
+  }
+}
+
 export async function fetchTouchById(touchId) {
   try {
     const res = await fetch(`${BASE_URL}/touches/${touchId}`)

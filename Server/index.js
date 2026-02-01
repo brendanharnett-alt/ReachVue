@@ -539,6 +539,56 @@ app.get('/touches', async (req, res) => {
   }
 });
 
+// Get all touches with contact and email activity data
+app.get('/touches/all', async (req, res) => {
+  const limit = parseInt(req.query.limit, 10) || 1000;
+  const offset = parseInt(req.query.offset, 10) || 0;
+
+  try {
+    const totalResult = await pool.query('SELECT COUNT(*) FROM touches');
+    const total = parseInt(totalResult.rows[0].count, 10);
+
+    const touchesResult = await pool.query(
+      `
+      SELECT 
+        t.*,
+        c.company,
+        c.first_name,
+        c.last_name,
+        c.email,
+        COALESCE(ee.open_count, 0) as open_count,
+        COALESCE(ee.click_count, 0) as click_count
+      FROM touches t
+      LEFT JOIN contacts c ON c.id = t.contact_id
+      LEFT JOIN (
+        SELECT 
+          email_id,
+          COUNT(*) FILTER (WHERE event_type = 'open') as open_count,
+          COUNT(*) FILTER (WHERE event_type = 'click') as click_count
+        FROM email_events
+        GROUP BY email_id
+      ) ee ON ee.email_id = t.id::text
+      ORDER BY t.touched_at DESC
+      LIMIT $1 OFFSET $2
+      `,
+      [limit, offset]
+    );
+
+    res.json({
+      touches: touchesResult.rows,
+      offset,
+      limit,
+      total,
+      hasOlder: offset + limit < total,
+      hasNewer: offset > 0
+    });
+
+  } catch (err) {
+    console.error('Error fetching all touches:', err);
+    res.status(500).send('Server error fetching touches');
+  }
+});
+
 // ----------------------
 // ⭐ UPDATED: Touch update with thread fields
 // ----------------------

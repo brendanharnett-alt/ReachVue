@@ -7,6 +7,7 @@ import TemplatesPage from "./pages/TemplatesPage";
 import SettingsPage from "./pages/SettingsPage";
 import CadencesPage from "./pages/CadencesPage";
 import CadenceDetailPage from "./pages/CadenceDetailPage";
+import ActivityPage from "./pages/ActivityPage";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -67,6 +68,8 @@ export default function App() {
             {/* Cadences page route */}
             <Route path="/cadences" element={<CadencesPage />} />
             <Route path="/cadences/:cadenceId" element={<CadenceDetailPage />} />
+            {/* Activity page route */}
+            <Route path="/activity" element={<ActivityPage />} />
           </Routes>
         </div>
       </div>
