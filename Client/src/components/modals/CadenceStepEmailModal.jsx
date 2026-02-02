@@ -321,7 +321,11 @@ export default function CadenceStepEmailModal({
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent 
+          className="max-w-3xl"
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>{initialBody ? "Edit Email Step" : "Add Email Step"}</DialogTitle>
             <DialogDescription>

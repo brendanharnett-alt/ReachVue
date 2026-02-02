@@ -448,7 +448,11 @@ export default function EmailModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent 
+          className="max-w-3xl"
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <div className="flex items-center justify-between">
               <DialogTitle>Send Email</DialogTitle>
