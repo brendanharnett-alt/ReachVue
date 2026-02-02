@@ -29,6 +29,7 @@ import Underline from "@tiptap/extension-underline"
 import { TextStyle } from "@tiptap/extension-text-style"
 import { Color } from "@tiptap/extension-color"
 import TextAlign from "@tiptap/extension-text-align"
+import Link from "@tiptap/extension-link"
 import {
   Bold,
   Italic,
@@ -44,6 +45,11 @@ import {
 } from "lucide-react"
 import { Extension } from "@tiptap/core"
 import TemplatePickerModal from "@/components/modals/TemplatePickerModal"
+
+// 🔹 Autolink extension - detects URLs and converts them to links
+const Autolink = Extension.create({
+  name: 'autolink',
+})
 
 // Font size extension
 const FontSize = Extension.create({
@@ -164,8 +170,52 @@ export default function CadenceStepEmailModal({
       Color.configure({ types: ["textStyle"] }),
       FontSize,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-blue-600 underline cursor-pointer',
+        },
+      }),
+      Autolink,
     ],
     content: "",
+    editorProps: {
+      handlePaste: (view, event) => {
+        const text = event.clipboardData?.getData('text/plain') || ''
+        const urlRegex = /(https?:\/\/[^\s]+)/g
+        
+        if (urlRegex.test(text)) {
+          const { state, dispatch } = view
+          const { selection } = state
+          const { from } = selection
+          const tr = state.tr
+          
+          // Split text by URLs
+          const parts = text.split(urlRegex)
+          let position = from
+          
+          parts.forEach((part) => {
+            if (!part) return
+            
+            if (urlRegex.test(part)) {
+              // This is a URL - insert as link
+              tr.insertText(part, position)
+              const linkMark = state.schema.marks.link.create({ href: part })
+              tr.addMark(position, position + part.length, linkMark)
+              position += part.length
+            } else {
+              // Regular text
+              tr.insertText(part, position)
+              position += part.length
+            }
+          })
+          
+          dispatch(tr)
+          return true
+        }
+        return false
+      },
+    },
   })
 
   const isEditorEmpty = () => {
