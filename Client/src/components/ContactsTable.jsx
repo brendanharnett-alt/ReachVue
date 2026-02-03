@@ -7,7 +7,6 @@ import EmailModal from "./modals/EmailModal"
 import { FilterModal } from "./filters/FilterModal"
 import { TagFilterModal } from "./filters/TagFilterModal"
 import { LastTouchFilterModal } from "./filters/LastTouchFilterModal"
-import TagModal from "./modals/TagModal"
 import AddContactsToCadencesModal from "./modals/AddContactsToCadencesModal"
 
 import {
@@ -254,9 +253,34 @@ function TagsCellAnchor({ contact, onEditTags, manageTagsOpen, allAvailableTags,
 }
 
 // 🔹 Manage Tags Popover component
-function ManageTagsPopover({ contact, allAvailableTags, onApply, onCancel }) {
-  // Original tags for comparison
-  const originalTags = contact.tags || []
+function ManageTagsPopover({ contact, contacts, allAvailableTags, onApply, onCancel }) {
+  // Detect bulk mode: if contacts array is provided, use it; otherwise use single contact
+  const isBulkMode = Array.isArray(contacts)
+  const contactsList = isBulkMode ? contacts : (contact ? [contact] : [])
+  
+  // Calculate original tags based on mode
+  let originalTags = []
+  if (isBulkMode) {
+    // For bulk mode: calculate common tags (tags that ALL contacts have)
+    const allTagsAcrossContacts = contactsList.flatMap(c => c.tags || [])
+    const tagNameCounts = new Map()
+    allTagsAcrossContacts.forEach(tag => {
+      const count = tagNameCounts.get(tag.tag_name) || 0
+      tagNameCounts.set(tag.tag_name, count + 1)
+    })
+    
+    // Common tags: tags that appear on ALL contacts
+    const commonTagNames = Array.from(tagNameCounts.entries())
+      .filter(([name, count]) => count === contactsList.length)
+      .map(([name]) => name)
+    
+    // Get full tag objects for common tags (use first contact's tag structure)
+    originalTags = contactsList[0]?.tags?.filter(t => commonTagNames.includes(t.tag_name)) || []
+  } else {
+    // Single contact mode: use existing logic
+    originalTags = contact?.tags || []
+  }
+  
   const originalTagNames = new Set(originalTags.map((t) => t.tag_name))
   
   // Staged changes: tags to add and tags to remove
@@ -410,12 +434,21 @@ function ManageTagsPopover({ contact, allAvailableTags, onApply, onCancel }) {
   }
 
   const handleApply = () => {
-    // Calculate final tags: original + added - removed
-    const finalTags = [
-      ...originalTags.filter((tag) => !tagsToRemove.has(tag.tag_name)),
-      ...tagsToAdd,
-    ]
-    onApply(finalTags)
+    if (isBulkMode) {
+      // Bulk mode: return structure with tagsToAdd and tagsToRemove
+      onApply({
+        tagsToAdd: tagsToAdd.map(t => t.tag_name),
+        tagsToRemove: Array.from(tagsToRemove),
+        isBulk: true
+      })
+    } else {
+      // Single mode: calculate final tags: original + added - removed
+      const finalTags = [
+        ...originalTags.filter((tag) => !tagsToRemove.has(tag.tag_name)),
+        ...tagsToAdd,
+      ]
+      onApply(finalTags)
+    }
   }
 
   const showAddDropdown = addInputFocused && (addSearchTerm || availableForAdd.length > 0)
@@ -435,7 +468,10 @@ function ManageTagsPopover({ contact, allAvailableTags, onApply, onCancel }) {
       {/* Header with title and X button */}
       <div className="p-3 border-b flex items-center justify-between gap-3 flex-shrink-0">
         <div className="text-sm font-medium">
-          Edit Tags for {contact.first_name} {contact.last_name}
+          {isBulkMode 
+            ? `Edit Tags for ${contactsList.length} Selected Contact${contactsList.length !== 1 ? 's' : ''}`
+            : `Edit Tags for ${contact?.first_name || ''} ${contact?.last_name || ''}`
+          }
         </div>
         <button
           onClick={onCancel}
@@ -865,6 +901,143 @@ export default function ContactsTable() {
     setTouchHistory([])
     setEmailPreset(null) // ⭐ Reset reply preset
     setLoadingHistory(false)
+  }
+
+  // 🔹 Handle bulk tags apply (for multiple selected contacts)
+  const handleBulkTagsApply = async (result) => {
+    // Detect if it's bulk mode result
+    const isBulk = result.isBulk === true
+    const selectedContactsList = contacts.filter(c => selectedContacts.includes(c.id))
+    
+    if (isBulk) {
+      // Bulk mode: result has {tagsToAdd, tagsToRemove}
+      const { tagsToAdd, tagsToRemove } = result
+      
+      // Capture snapshots for rollback
+      const snapshots = new Map()
+      selectedContactsList.forEach(c => {
+        snapshots.set(c.id, { ...c })
+      })
+      
+      // Optimistic update: update UI immediately for all selected contacts
+      setContacts((prev) =>
+        prev.map((c) => {
+          if (selectedContacts.includes(c.id)) {
+            const currentTagNames = (c.tags || []).map(t => t.tag_name)
+            // Remove tags to remove, add tags to add
+            const finalTagNames = [
+              ...currentTagNames.filter(tn => !tagsToRemove.includes(tn)),
+              ...tagsToAdd
+            ]
+            // Remove duplicates
+            const uniqueTagNames = [...new Set(finalTagNames)]
+            
+            // Create minimal tag objects (will be replaced with real IDs after persistence)
+            const updatedTags = uniqueTagNames.map(tagName => ({
+              tag_id: `temp-${Date.now()}-${Math.random()}`,
+              tag_name: tagName
+            }))
+            return { ...c, tags: updatedTags }
+          }
+          return c
+        })
+      )
+      
+      // Close modal immediately
+      setShowTagModal(false)
+      
+      // Background persistence (non-blocking)
+      ;(async () => {
+        try {
+          // Identify new tags to create (those in tagsToAdd that don't exist yet)
+          // Check if tag names exist in allAvailableTags
+          const tagsToCreate = tagsToAdd.filter(tagName => {
+            return !allAvailableTags.some(t => t.tag_name === tagName)
+          })
+          
+          // Create new tags in background
+          const createdTagNames = []
+          for (const tagName of tagsToCreate) {
+            try {
+              const createdTag = await addTag(tagName)
+              createdTagNames.push(createdTag.tag_name)
+            } catch (err) {
+              // If tag already exists, that's fine - we can still use it
+              if (err.message && err.message.includes('already exists')) {
+                createdTagNames.push(tagName)
+              } else {
+                console.error(`Failed to create tag ${tagName}:`, err)
+              }
+            }
+          }
+          
+          // Update each selected contact
+          const updatePromises = selectedContactsList.map(async (contact) => {
+            try {
+              const currentTagNames = (contact.tags || []).map(t => t.tag_name)
+              // Calculate final tags: remove tagsToRemove, add tagsToAdd
+              const finalTagNames = [
+                ...currentTagNames.filter(tn => !tagsToRemove.includes(tn)),
+                ...tagsToAdd
+              ]
+              // Remove duplicates
+              const uniqueTagNames = [...new Set(finalTagNames)]
+              
+              // Update contact
+              await updateContact(contact.id, {
+                ...contact,
+                tags: uniqueTagNames
+              })
+            } catch (err) {
+              console.error(`Failed to update contact ${contact.id}:`, err)
+              throw err
+            }
+          })
+          
+          await Promise.all(updatePromises)
+          
+          // Update local state with real tag IDs for successfully created tags
+          if (createdTagNames.length > 0) {
+            const allTags = await fetchTags()
+            const tagNameToId = new Map(allTags.map(t => [t.tag_name, t.tag_id]))
+            setContacts((prev) =>
+              prev.map((c) => {
+                if (selectedContacts.includes(c.id)) {
+                  const updatedTags = c.tags.map(t => {
+                    // Replace temp tags with real tags if they were created
+                    if (typeof t.tag_id === 'string' && t.tag_id.startsWith('temp-')) {
+                      const realId = tagNameToId.get(t.tag_name)
+                      if (realId) {
+                        return { ...t, tag_id: realId }
+                      }
+                    }
+                    return t
+                  })
+                  return { ...c, tags: updatedTags }
+                }
+                return c
+              })
+            )
+          }
+        } catch (err) {
+          console.error("Failed to persist bulk tags:", err)
+          // Rollback optimistic updates for all contacts
+          setContacts((prev) =>
+            prev.map((c) => {
+              if (selectedContacts.includes(c.id)) {
+                const snapshot = snapshots.get(c.id)
+                return snapshot ? { ...snapshot } : c
+              }
+              return c
+            })
+          )
+          alert("Failed to save tags for some contacts. Changes have been reverted.")
+        }
+      })()
+    } else {
+      // Single mode: result is finalTags array (shouldn't happen in bulk context, but handle it)
+      console.warn("handleBulkTagsApply received single mode result in bulk context")
+    }
   }
 
   useEffect(() => {
@@ -2211,41 +2384,30 @@ export default function ContactsTable() {
         }}
       />
 
-      {/* Tag Management */}
-      <TagModal
-        open={showTagModal}
-        onClose={() => setShowTagModal(false)}
-        selectedContacts={selectedContacts}
-        contacts={contacts}
-        onTagsApplied={(contactIds, tagNames, isRemove = false) => {
-          // Optimistic update: immediately update UI
-          setContacts((prev) =>
-            prev.map((c) => {
-              if (contactIds.includes(c.id)) {
-                const currentTagNames = (c.tags || []).map(t => t.tag_name)
-                let newTagNames
-                
-                if (isRemove) {
-                  // Remove specified tags
-                  newTagNames = currentTagNames.filter(tagName => !tagNames.includes(tagName))
-                } else {
-                  // Add new tags (avoid duplicates)
-                  newTagNames = [...new Set([...currentTagNames, ...tagNames])]
-                }
-                
-                // Convert tag names back to tag objects (we'll need to fetch tags for full objects)
-                // For now, create minimal tag objects with tag_name
-                const updatedTags = newTagNames.map(tagName => ({
-                  tag_id: `temp-${Date.now()}-${Math.random()}`, // Temporary, will be replaced on refresh
-                  tag_name: tagName
-                }))
-                return { ...c, tags: updatedTags }
-              }
-              return c
-            })
-          )
+      {/* Tag Management - Bulk Operations */}
+      <Dialog 
+        open={showTagModal} 
+        onOpenChange={(open) => {
+          if (!open) setShowTagModal(false)
         }}
-      />
+        modal={true}
+      >
+        <DialogContent
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => {
+            setShowTagModal(false)
+            e.preventDefault()
+          }}
+          className="w-[640px] max-w-[720px] max-h-[75vh] p-0 overflow-visible flex flex-col [&>button]:hidden"
+        >
+          <ManageTagsPopover
+            contacts={contacts.filter(c => selectedContacts.includes(c.id))}
+            allAvailableTags={allAvailableTags}
+            onApply={handleBulkTagsApply}
+            onCancel={() => setShowTagModal(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Add to Cadences */}
       <AddContactsToCadencesModal
