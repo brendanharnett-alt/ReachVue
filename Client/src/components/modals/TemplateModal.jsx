@@ -8,6 +8,18 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Underline from "@tiptap/extension-underline"
@@ -29,12 +41,19 @@ import {
   Outdent,
   Save,
   Send,
+  Code,
 } from "lucide-react"
 import { Extension } from "@tiptap/core"
 
 // 🔹 Autolink extension - detects URLs and converts them to links
 const Autolink = Extension.create({
   name: 'autolink',
+})
+
+// 🔹 Variable styling extension - placeholder for variable styling
+// Actual styling is handled via useEffect and CSS
+const VariableStyle = Extension.create({
+  name: 'variableStyle',
 })
 
 // 🔹 Font size extension
@@ -70,11 +89,16 @@ export default function TemplateModal({
 }) {
   const subjectRef = useRef(null)
   const nameRef = useRef(null)
+  const editorContainerRef = useRef(null)
   const [saving, setSaving] = useState(false)
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ blockquote: true }),
+      StarterKit.configure({ 
+        blockquote: true,
+        link: false, // Disable link from StarterKit since we add it separately
+        underline: false, // Disable underline from StarterKit since we add it separately
+      }),
       Underline,
       TextStyle,
       Color.configure({ types: ["textStyle"] }),
@@ -87,6 +111,7 @@ export default function TemplateModal({
         },
       }),
       Autolink,
+      VariableStyle,
     ],
     content: "",
     editorProps: {
@@ -146,6 +171,84 @@ export default function TemplateModal({
       if (nameRef.current) nameRef.current.value = ""
     }
   }, [open, editor])
+
+  // 🎨 Style variables in the editor by wrapping them in spans
+  // Note: This uses DOM manipulation which is safe as it only wraps text nodes
+  useEffect(() => {
+    if (!editor || !open) return
+
+    let timeoutId = null
+
+    const styleVariables = () => {
+      // Clear any pending timeouts
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+
+      timeoutId = setTimeout(() => {
+        const editorElement = editorContainerRef.current?.querySelector('.ProseMirror')
+        if (!editorElement) return
+
+        const variableRegex = /\{\{(\w+)\}\}/g
+        
+        // Use a more careful approach: only style if editor is not in a transaction
+        if (editor.isDestroyed) return
+
+        const walker = document.createTreeWalker(
+          editorElement,
+          NodeFilter.SHOW_TEXT,
+          null
+        )
+
+        let textNode
+        const nodesToProcess = []
+
+        while ((textNode = walker.nextNode())) {
+          const text = textNode.textContent || ''
+          if (variableRegex.test(text)) {
+            const parent = textNode.parentElement
+            // Skip if already wrapped or if parent is a variable span
+            if (!parent?.classList.contains('tiptap-variable')) {
+              nodesToProcess.push({ textNode, text, parent })
+            }
+          }
+        }
+
+        // Process nodes in reverse to avoid index issues
+        nodesToProcess.reverse().forEach(({ textNode, text, parent }) => {
+          const newHTML = text.replace(/\{\{(\w+)\}\}/g, '<span class="tiptap-variable">$&</span>')
+          if (newHTML !== text && parent && textNode.parentNode === parent) {
+            const temp = document.createElement('div')
+            temp.innerHTML = newHTML
+            const fragment = document.createDocumentFragment()
+            while (temp.firstChild) {
+              fragment.appendChild(temp.firstChild)
+            }
+            try {
+              parent.replaceChild(fragment, textNode)
+            } catch (e) {
+              // Ignore errors if node was already replaced
+              console.debug('Variable styling: node already replaced', e)
+            }
+          }
+        })
+      }, 50)
+    }
+
+    // Style variables after editor updates
+    editor.on('update', styleVariables)
+
+    // Initial styling after a delay to ensure editor is ready
+    setTimeout(styleVariables, 200)
+
+    return () => {
+      // Cleanup: remove event listener and clear any pending timeouts
+      if (editor && !editor.isDestroyed) {
+        editor.off('update', styleVariables)
+      }
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [editor, open])
 
   // -----------------------
   // Save Template
@@ -239,8 +342,22 @@ export default function TemplateModal({
   const fontSizes = ["12px", "14px", "18px", "24px"]
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl">
+    <>
+      <style>{`
+        /* Style variables in the TipTap editor */
+        .tiptap-variable {
+          background-color: #dbeafe !important;
+          color: #1e40af !important;
+          padding: 2px 4px !important;
+          border-radius: 3px !important;
+          font-family: 'Courier New', monospace !important;
+          font-size: 0.9em !important;
+          font-weight: 500 !important;
+          display: inline-block !important;
+        }
+      `}</style>
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>{template ? "Edit Template" : "New Template"}</DialogTitle>
         </DialogHeader>
@@ -253,6 +370,7 @@ export default function TemplateModal({
           <Input ref={subjectRef} placeholder="Subject" className="w-full" />
 
           {/* Toolbar */}
+          <TooltipProvider>
           <div className="flex items-center flex-wrap space-x-1 border rounded-md p-1 bg-gray-50">
             <Button
               size="sm"
@@ -337,6 +455,58 @@ export default function TemplateModal({
               <Outdent size={16} />
             </Button>
 
+            {/* Variables Dropdown */}
+            <div className="ml-2 border-l border-gray-300 pl-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        type="button"
+                      >
+                        <Code size={16} />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          editor?.chain().focus().insertContent('{{firstname}}').run()
+                        }}
+                      >
+                        First Name
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          editor?.chain().focus().insertContent('{{lastname}}').run()
+                        }}
+                      >
+                        Last Name
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          editor?.chain().focus().insertContent('{{title}}').run()
+                        }}
+                      >
+                        Title
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          editor?.chain().focus().insertContent('{{company}}').run()
+                        }}
+                      >
+                        Company
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Insert variable</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+
             {/* Font size */}
             <select
               className="ml-2 text-sm border rounded p-1 bg-white"
@@ -385,9 +555,10 @@ export default function TemplateModal({
               </div>
             </div>
           </div>
+          </TooltipProvider>
 
           {/* Editor */}
-          <div className="border rounded-md bg-white h-[250px] overflow-y-auto p-2">
+          <div ref={editorContainerRef} className="border rounded-md bg-white h-[250px] overflow-y-auto p-2">
             <EditorContent
               editor={editor}
               className="prose max-w-none focus:outline-none h-full"
@@ -414,5 +585,6 @@ export default function TemplateModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   )
 }

@@ -15,6 +15,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Underline from "@tiptap/extension-underline"
@@ -37,6 +43,7 @@ import {
   Eye,
   MousePointerClick,
   Linkedin,
+  Code,
 } from "lucide-react"
 import { Extension } from "@tiptap/core"
 import { logTouch, signLink } from "../../api"
@@ -71,6 +78,12 @@ const FontSize = Extension.create({
       },
     ]
   },
+})
+
+// 🔹 Variable styling extension - placeholder for variable styling
+// Actual styling is handled via useEffect and CSS
+const VariableStyle = Extension.create({
+  name: 'variableStyle',
 })
 
 export default function EmailModal({
@@ -124,7 +137,11 @@ export default function EmailModal({
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ blockquote: true }),
+      StarterKit.configure({ 
+        blockquote: true,
+        link: false, // Disable link from StarterKit since we add it separately
+        underline: false, // Disable underline from StarterKit since we add it separately
+      }),
       Underline,
       TextStyle,
       Color.configure({ types: ["textStyle"] }),
@@ -137,6 +154,7 @@ export default function EmailModal({
         },
       }),
       Autolink,
+      VariableStyle,
     ],
     content: "",
     editorProps: {
@@ -195,6 +213,84 @@ export default function EmailModal({
       setTrackClicks(true) // Reset to defaults
     }
   }, [open, editor])
+
+  // 🎨 Style variables in the editor by wrapping them in spans
+  // Note: This uses DOM manipulation which is safe as it only wraps text nodes
+  useEffect(() => {
+    if (!editor || !open) return
+
+    let timeoutId = null
+
+    const styleVariables = () => {
+      // Clear any pending timeouts
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+
+      timeoutId = setTimeout(() => {
+        const editorElement = editorContainerRef.current?.querySelector('.ProseMirror')
+        if (!editorElement) return
+
+        const variableRegex = /\{\{(\w+)\}\}/g
+        
+        // Use a more careful approach: only style if editor is not in a transaction
+        if (editor.isDestroyed) return
+
+        const walker = document.createTreeWalker(
+          editorElement,
+          NodeFilter.SHOW_TEXT,
+          null
+        )
+
+        let textNode
+        const nodesToProcess = []
+
+        while ((textNode = walker.nextNode())) {
+          const text = textNode.textContent || ''
+          if (variableRegex.test(text)) {
+            const parent = textNode.parentElement
+            // Skip if already wrapped or if parent is a variable span
+            if (!parent?.classList.contains('tiptap-variable')) {
+              nodesToProcess.push({ textNode, text, parent })
+            }
+          }
+        }
+
+        // Process nodes in reverse to avoid index issues
+        nodesToProcess.reverse().forEach(({ textNode, text, parent }) => {
+          const newHTML = text.replace(/\{\{(\w+)\}\}/g, '<span class="tiptap-variable">$&</span>')
+          if (newHTML !== text && parent && textNode.parentNode === parent) {
+            const temp = document.createElement('div')
+            temp.innerHTML = newHTML
+            const fragment = document.createDocumentFragment()
+            while (temp.firstChild) {
+              fragment.appendChild(temp.firstChild)
+            }
+            try {
+              parent.replaceChild(fragment, textNode)
+            } catch (e) {
+              // Ignore errors if node was already replaced
+              console.debug('Variable styling: node already replaced', e)
+            }
+          }
+        })
+      }, 50)
+    }
+
+    // Style variables after editor updates
+    editor.on('update', styleVariables)
+
+    // Initial styling after a delay to ensure editor is ready
+    setTimeout(styleVariables, 200)
+
+    return () => {
+      // Cleanup: remove event listener and clear any pending timeouts
+      if (editor && !editor.isDestroyed) {
+        editor.off('update', styleVariables)
+      }
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [editor, open])
 
   // 📨 Prefill subject + body for replies (robust + deterministic)
   // Also append signature if auto_signature is enabled
@@ -297,6 +393,24 @@ export default function EmailModal({
 
   if (!contact) return null
 
+  // 🔹 Helper function to replace variables in text/HTML
+  const replaceVariables = (text, contact) => {
+    if (!text || !contact) return text
+    
+    const variableMap = {
+      'firstname': contact.first_name || '',
+      'lastname': contact.last_name || '',
+      'title': contact.title || '',
+      'company': contact.company || '',
+    }
+    
+    // Replace variables (case-insensitive)
+    return text.replace(/\{\{(\w+)\}\}/gi, (match, varName) => {
+      const normalizedVar = varName.toLowerCase().trim()
+      return variableMap[normalizedVar] !== undefined ? variableMap[normalizedVar] : match
+    })
+  }
+
   // Helper function to replace links with tracking URLs
   const replaceLinksWithTracking = async (html, emailId) => {
     if (!html) return html
@@ -362,9 +476,13 @@ export default function EmailModal({
   }
 
   const handleSend = async () => {
-    const subject = subjectRef.current?.value || ""
+    let subject = subjectRef.current?.value || ""
     let bodyHtml = editor?.getHTML() || ""
     const recipient = contact.email
+
+    // Replace variables in subject and body before sending
+    subject = replaceVariables(subject, contact)
+    bodyHtml = replaceVariables(bodyHtml, contact)
 
     bodyHtml = bodyHtml.replace(/<p><\/p>/g, "<div>&nbsp;</div>")
 
@@ -498,6 +616,19 @@ export default function EmailModal({
 
   return (
     <>
+      <style>{`
+        /* Style variables in the TipTap editor */
+        .tiptap-variable {
+          background-color: #dbeafe !important;
+          color: #1e40af !important;
+          padding: 2px 4px !important;
+          border-radius: 3px !important;
+          font-family: 'Courier New', monospace !important;
+          font-size: 0.9em !important;
+          font-weight: 500 !important;
+          display: inline-block !important;
+        }
+      `}</style>
       <Dialog open={open} onOpenChange={onClose}>
         <DialogContent 
           className="max-w-3xl"
@@ -622,6 +753,58 @@ export default function EmailModal({
               >
                 <Outdent size={16} />
               </Button>
+
+              {/* Variables Dropdown */}
+              <div className="ml-2 border-l border-gray-300 pl-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          type="button"
+                        >
+                          <Code size={16} />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            editor?.chain().focus().insertContent('{{firstname}}').run()
+                          }}
+                        >
+                          First Name
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            editor?.chain().focus().insertContent('{{lastname}}').run()
+                          }}
+                        >
+                          Last Name
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            editor?.chain().focus().insertContent('{{title}}').run()
+                          }}
+                        >
+                          Title
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            editor?.chain().focus().insertContent('{{company}}').run()
+                          }}
+                        >
+                          Company
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Insert variable</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
 
               {/* Tracking Controls */}
               <div className="ml-2 border-l border-gray-300 pl-1 flex items-center gap-1">
