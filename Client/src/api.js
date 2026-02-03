@@ -33,7 +33,7 @@ export async function updateContact(contactId, contactData) {
     let tag_ids = []
     if (contactData.tags && Array.isArray(contactData.tags) && contactData.tags.length > 0) {
       const allTags = await fetchTags()
-      const tagMap = new Map(allTags.map(tag => [tag.tag_name, tag.id]))
+      const tagMap = new Map(allTags.map(tag => [tag.tag_name, tag.tag_id]))
       tag_ids = contactData.tags
         .map(tagName => tagMap.get(tagName))
         .filter(id => id !== undefined)
@@ -103,9 +103,33 @@ export async function addTag(tagName) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tag_name: tagName }),
     })
-    if (!res.ok) throw new Error("Failed to add tag")
-    return await res.json()
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.js:101',message:'addTag response',data:{tagName,status:res.status,statusText:res.statusText,ok:res.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
+    // #endregion
+    
+    if (!res.ok) {
+      const errorText = await res.text()
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.js:107',message:'addTag failed',data:{tagName,status:res.status,errorText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
+      // #endregion
+      
+      throw new Error(errorText || "Failed to add tag")
+    }
+    
+    const result = await res.json()
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.js:115',message:'addTag success',data:{tagName,result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'K'})}).catch(()=>{});
+    // #endregion
+    
+    return result
   } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.js:120',message:'addTag exception',data:{tagName,error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'L'})}).catch(()=>{});
+    // #endregion
+    
     console.error("Add tag error:", err)
     throw err
   }

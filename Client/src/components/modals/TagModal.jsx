@@ -3,9 +3,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { fetchTags, addTag } from "../../api"
+import { fetchTags, addTag, updateContact } from "../../api"
 
-export default function TagModal({ open, onClose, selectedContacts }) {
+export default function TagModal({ open, onClose, selectedContacts, onTagsApplied, contacts }) {
   const [tags, setTags] = useState([])
   const [newTag, setNewTag] = useState("")
   const [selectedTags, setSelectedTags] = useState([])
@@ -102,13 +102,128 @@ export default function TagModal({ open, onClose, selectedContacts }) {
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>
+            <Button 
+              variant="outline" 
+              onClick={async () => {
+                if (selectedTags.length === 0 || selectedContacts.length === 0) {
+                  onClose()
+                  return
+                }
+                
+                // Optimistic update: notify parent immediately
+                if (onTagsApplied) {
+                  // Convert tag IDs to tag names for removal
+                  const tagNamesToRemove = tags
+                    .filter(tag => selectedTags.includes(tag.tag_id))
+                    .map(tag => tag.tag_name)
+                  
+                  // For untagging, we pass negative tag names (or use a different callback)
+                  // Actually, we'll use the same callback but the parent will handle removal
+                  onTagsApplied(selectedContacts, tagNamesToRemove, true) // true = remove mode
+                }
+                
+                // Close modal immediately
+                onClose()
+                
+                // Background persistence (non-blocking)
+                ;(async () => {
+                  try {
+                    // Fetch all tags to get tag names from IDs
+                    const allTags = await fetchTags()
+                    const tagIdToName = new Map(allTags.map(t => [t.tag_id, t.tag_name]))
+                    const tagNamesToRemove = selectedTags
+                      .map(tagId => tagIdToName.get(tagId))
+                      .filter(Boolean)
+                    
+                    // Update each selected contact
+                    const updatePromises = selectedContacts.map(async (contactId) => {
+                      try {
+                        // Get current contact to remove tags
+                        const contact = contacts?.find(c => c.id === contactId)
+                        const currentTagNames = (contact?.tags || []).map(t => t.tag_name)
+                        // Remove selected tags
+                        const remainingTagNames = currentTagNames.filter(
+                          tagName => !tagNamesToRemove.includes(tagName)
+                        )
+                        
+                        // Update contact with remaining tags
+                        await updateContact(contactId, { 
+                          ...contact,
+                          tags: remainingTagNames 
+                        })
+                      } catch (err) {
+                        console.error(`Failed to update contact ${contactId}:`, err)
+                        throw err
+                      }
+                    })
+                    
+                    await Promise.all(updatePromises)
+                  } catch (err) {
+                    console.error("Failed to persist tag removal:", err)
+                    alert("Some tag removals failed to save. Please refresh and try again.")
+                  }
+                })()
+              }}
+            >
               Untag
             </Button>
             <Button
-              onClick={() =>
-                console.log("Assign tags:", selectedTags, "to contacts:", selectedContacts)
-              }
+              onClick={async () => {
+                if (selectedTags.length === 0 || selectedContacts.length === 0) {
+                  onClose()
+                  return
+                }
+                
+                // Optimistic update: notify parent immediately
+                if (onTagsApplied) {
+                  // Convert tag IDs to tag names for the callback
+                  const tagNames = tags
+                    .filter(tag => selectedTags.includes(tag.tag_id))
+                    .map(tag => tag.tag_name)
+                  
+                  onTagsApplied(selectedContacts, tagNames)
+                }
+                
+                // Close modal immediately
+                onClose()
+                
+                // Background persistence (non-blocking)
+                ;(async () => {
+                  try {
+                    // Fetch all tags to get tag names from IDs
+                    const allTags = await fetchTags()
+                    const tagIdToName = new Map(allTags.map(t => [t.tag_id, t.tag_name]))
+                    const tagNamesToAdd = selectedTags
+                      .map(tagId => tagIdToName.get(tagId))
+                      .filter(Boolean)
+                    
+                    // Update each selected contact
+                    const updatePromises = selectedContacts.map(async (contactId) => {
+                      try {
+                        // Get current contact to merge tags
+                        const contact = contacts?.find(c => c.id === contactId)
+                        const currentTagNames = (contact?.tags || []).map(t => t.tag_name)
+                        // Merge: combine current tags with new tags, remove duplicates
+                        const mergedTagNames = [...new Set([...currentTagNames, ...tagNamesToAdd])]
+                        
+                        // Update contact with merged tags
+                        await updateContact(contactId, { 
+                          ...contact,
+                          tags: mergedTagNames 
+                        })
+                      } catch (err) {
+                        console.error(`Failed to update contact ${contactId}:`, err)
+                        throw err
+                      }
+                    })
+                    
+                    await Promise.all(updatePromises)
+                  } catch (err) {
+                    console.error("Failed to persist tags:", err)
+                    alert("Some tags failed to save. Please refresh and try again.")
+                  }
+                })()
+              }}
             >
               Tag
             </Button>

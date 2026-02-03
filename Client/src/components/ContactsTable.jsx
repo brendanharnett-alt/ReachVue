@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef, useLayoutEffect, useCallback } from "react"
-import { fetchContacts, deleteContact } from "../api"
+import { fetchContacts, deleteContact, updateContact, addTag, fetchTags } from "../api"
 import CallModal from "./modals/CallModal"
 import LinkedInModal from "./modals/LinkedInModal"
 import TouchHistoryModal from "./modals/TouchHistoryModal"
@@ -1833,8 +1833,15 @@ export default function ContactsTable() {
                                 onEditTags={() => setManageTagsContactId(contact.id)}
                                 manageTagsOpen={manageTagsContactId === contact.id}
                                 allAvailableTags={allAvailableTags}
-                                onApply={(draftTags) => {
-                                  // Update contact with draft tags
+                                onApply={async (draftTags) => {
+                                  // #region agent log
+                                  fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ContactsTable.jsx:1836',message:'onApply called',data:{contactId:contact.id,draftTagsCount:draftTags.length,draftTags:draftTags.map(t=>({tag_id:t.tag_id,tag_name:t.tag_name})),hasTempTags:draftTags.some(t=>typeof t.tag_id==='string'&&t.tag_id.startsWith('temp-'))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                                  // #endregion
+                                  
+                                  // Capture snapshot for rollback
+                                  const snapshot = contacts.find(c => c.id === contact.id)
+                                  
+                                  // Optimistic update: update UI immediately
                                   setContacts((prev) =>
                                     prev.map((c) =>
                                       c.id === contact.id
@@ -1843,6 +1850,117 @@ export default function ContactsTable() {
                                     )
                                   )
                                   setManageTagsContactId(null)
+                                  
+                                  // Background persistence (non-blocking)
+                                  ;(async () => {
+                                    try {
+                                      // Extract tag names from draftTags
+                                      const tagNames = draftTags.map(t => t.tag_name)
+                                      
+                                      // Identify and persist new tags (those with temp IDs)
+                                      const tagsToCreate = draftTags.filter(t => 
+                                        typeof t.tag_id === 'string' && t.tag_id.startsWith('temp-')
+                                      )
+                                      
+                                      // #region agent log
+                                      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ContactsTable.jsx:1857',message:'Tags to create identified',data:{tagsToCreateCount:tagsToCreate.length,tagsToCreate:tagsToCreate.map(t=>({tag_id:t.tag_id,tag_name:t.tag_name})),tagNames},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                                      // #endregion
+                                      
+                                      // Create new tags in background
+                                      const createdTagNames = []
+                                      for (const tempTag of tagsToCreate) {
+                                        try {
+                                          // #region agent log
+                                          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ContactsTable.jsx:1864',message:'Creating tag',data:{tagName:tempTag.tag_name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                                          // #endregion
+                                          
+                                          const createdTag = await addTag(tempTag.tag_name)
+                                          
+                                          // #region agent log
+                                          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ContactsTable.jsx:1866',message:'Tag created successfully',data:{tagName:tempTag.tag_name,createdTag},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                                          // #endregion
+                                          
+                                          createdTagNames.push(createdTag.tag_name)
+                                        } catch (err) {
+                                          // #region agent log
+                                          fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ContactsTable.jsx:1868',message:'Tag creation failed',data:{tagName:tempTag.tag_name,error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                                          // #endregion
+                                          
+                                          // If tag already exists, that's fine - we can still use it
+                                          // Only remove the tag if it's a different error
+                                          if (err.message && err.message.includes('already exists')) {
+                                            // Tag exists, so we can use it - don't remove from tagNames
+                                            // #region agent log
+                                            fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ContactsTable.jsx:1872',message:'Tag already exists, will use existing',data:{tagName:tempTag.tag_name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'M'})}).catch(()=>{});
+                                            // #endregion
+                                            createdTagNames.push(tempTag.tag_name) // Mark as "created" so we update local state
+                                          } else {
+                                            // Real error - remove from tagNames
+                                            console.error(`Failed to create tag ${tempTag.tag_name}:`, err)
+                                            const index = tagNames.indexOf(tempTag.tag_name)
+                                            if (index > -1) {
+                                              tagNames.splice(index, 1)
+                                            }
+                                          }
+                                        }
+                                      }
+                                      
+                                      // #region agent log
+                                      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ContactsTable.jsx:1879',message:'Updating contact',data:{contactId:contact.id,tagNames,createdTagNamesCount:createdTagNames.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+                                      // #endregion
+                                      
+                                      // Only persist if we have at least some tags (or if we're removing all tags)
+                                      // Persist contact update
+                                      await updateContact(contact.id, {
+                                        ...contact,
+                                        tags: tagNames
+                                      })
+                                      
+                                      // #region agent log
+                                      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ContactsTable.jsx:1883',message:'Contact updated successfully',data:{contactId:contact.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                                      // #endregion
+                                      
+                                      // Update local state with real tag IDs for successfully created/existing tags
+                                      // This ensures the UI shows correct tag structure
+                                      if (createdTagNames.length > 0 || tagsToCreate.length > 0) {
+                                        const allTags = await fetchTags()
+                                        const tagNameToId = new Map(allTags.map(t => [t.tag_name, t.tag_id]))
+                                        setContacts((prev) =>
+                                          prev.map((c) => {
+                                            if (c.id === contact.id) {
+                                              const updatedTags = c.tags.map(t => {
+                                                // Replace temp tags with real tags if they exist in the database
+                                                if (typeof t.tag_id === 'string' && t.tag_id.startsWith('temp-')) {
+                                                  const realId = tagNameToId.get(t.tag_name)
+                                                  if (realId) {
+                                                    return { ...t, tag_id: realId }
+                                                  }
+                                                }
+                                                return t
+                                              })
+                                              return { ...c, tags: updatedTags }
+                                            }
+                                            return c
+                                          })
+                                        )
+                                      }
+                                    } catch (err) {
+                                      // #region agent log
+                                      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ContactsTable.jsx:1905',message:'Persistence failed',data:{contactId:contact.id,error:err.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+                                      // #endregion
+                                      
+                                      console.error("Failed to persist tags:", err)
+                                      // Rollback optimistic update
+                                      setContacts((prev) =>
+                                        prev.map((c) =>
+                                          c.id === contact.id
+                                            ? { ...c, tags: snapshot?.tags || [] }
+                                            : c
+                                        )
+                                      )
+                                      alert("Failed to save tags. Changes have been reverted.")
+                                    }
+                                  })()
                                 }}
                                 onCancel={() => {
                                   setManageTagsContactId(null)
@@ -2098,6 +2216,35 @@ export default function ContactsTable() {
         open={showTagModal}
         onClose={() => setShowTagModal(false)}
         selectedContacts={selectedContacts}
+        contacts={contacts}
+        onTagsApplied={(contactIds, tagNames, isRemove = false) => {
+          // Optimistic update: immediately update UI
+          setContacts((prev) =>
+            prev.map((c) => {
+              if (contactIds.includes(c.id)) {
+                const currentTagNames = (c.tags || []).map(t => t.tag_name)
+                let newTagNames
+                
+                if (isRemove) {
+                  // Remove specified tags
+                  newTagNames = currentTagNames.filter(tagName => !tagNames.includes(tagName))
+                } else {
+                  // Add new tags (avoid duplicates)
+                  newTagNames = [...new Set([...currentTagNames, ...tagNames])]
+                }
+                
+                // Convert tag names back to tag objects (we'll need to fetch tags for full objects)
+                // For now, create minimal tag objects with tag_name
+                const updatedTags = newTagNames.map(tagName => ({
+                  tag_id: `temp-${Date.now()}-${Math.random()}`, // Temporary, will be replaced on refresh
+                  tag_name: tagName
+                }))
+                return { ...c, tags: updatedTags }
+              }
+              return c
+            })
+          )
+        }}
       />
 
       {/* Add to Cadences */}
