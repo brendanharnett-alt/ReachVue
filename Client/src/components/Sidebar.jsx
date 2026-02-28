@@ -18,12 +18,12 @@ export default function Sidebar() {
     <div className="group fixed left-0 top-0 h-screen z-40">
       <div
         className="h-full text-white flex flex-col
-                   shadow-lg border-r
-                   w-20 group-hover:w-52 transition-all duration-300 ease-in-out overflow-hidden"
-        style={{ backgroundColor: '#3B5FC7', borderColor: '#2d4aa8', boxShadow: '0 10px 15px -3px rgba(59, 95, 199, 0.3), 0 4px 6px -2px rgba(59, 95, 199, 0.2)' }}
+                   shadow-[4px_0_16px_rgba(0,0,0,0.12)] border-r border-white/10
+                   w-20 group-hover:w-60 transition-all duration-300 ease-in-out overflow-hidden"
+        style={{ backgroundColor: '#3a5b91' }}
       >
         {/* Header */}
-        <div className="flex items-center pt-4 pb-2 mb-2 w-full">
+        <div className="flex items-center pt-6 pb-2 mb-2 w-full">
           {/* Fixed-width icon area - always w-20 to match collapsed sidebar */}
           <div className="w-20 h-8 flex items-center justify-center flex-shrink-0">
             <img src={icon} alt="ReachVue" className="h-11 w-11" />
