@@ -1,5 +1,5 @@
 import React from "react";
-import logo from "../assets/DarkLogo.png";
+import icon from "../assets/Icon.svg";
 import { User, MailCheck, FileText, Settings, Activity } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
@@ -17,13 +17,17 @@ export default function Sidebar() {
   return (
     <div className="group fixed left-0 top-0 h-screen z-40">
       <div
-        className="h-full bg-gray-900 text-white flex flex-col items-center p-4
-                   shadow-lg shadow-gray-700/40 border-r border-gray-800
+        className="h-full text-white flex flex-col items-center p-4
+                   shadow-lg border-r
                    w-20 group-hover:w-60 transition-all duration-300 ease-in-out overflow-hidden"
+        style={{ backgroundColor: '#3B5FC7', borderColor: '#2d4aa8', boxShadow: '0 10px 15px -3px rgba(59, 95, 199, 0.3), 0 4px 6px -2px rgba(59, 95, 199, 0.2)' }}
       >
-        {/* Logo */}
-        <div className="mb-8 w-full px-2 hidden group-hover:block">
-          <img src={logo} alt="ReachVue" className="h-12 mx-auto" />
+        {/* Header */}
+        <div className="flex items-center gap-3 px-3 py-2 mb-2 w-full">
+          {/* Icon - always visible */}
+          <img src={icon} alt="ReachVue" className="h-8 w-8 flex-shrink-0" />
+          {/* Text - shown when expanded */}
+          <span className="text-xl font-semibold hidden group-hover:inline">ReachVue</span>
         </div>
 
         {/* Navigation */}
@@ -39,7 +43,7 @@ export default function Sidebar() {
                 key={item.label}
                 to={item.href}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${
-                  isActive ? "bg-gray-800" : "hover:bg-gray-800"
+                  isActive ? "bg-white/20" : "hover:bg-white/10"
                 }`}
               >
                 {item.icon}

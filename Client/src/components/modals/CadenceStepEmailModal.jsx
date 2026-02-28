@@ -23,6 +23,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Underline from "@tiptap/extension-underline"
@@ -42,6 +48,7 @@ import {
   AlignRight,
   Indent,
   Outdent,
+  Code,
 } from "lucide-react"
 import { Extension } from "@tiptap/core"
 import TemplatePickerModal from "@/components/modals/TemplatePickerModal"
@@ -49,6 +56,12 @@ import TemplatePickerModal from "@/components/modals/TemplatePickerModal"
 // 🔹 Autolink extension - detects URLs and converts them to links
 const Autolink = Extension.create({
   name: 'autolink',
+})
+
+// 🔹 Variable styling extension - placeholder for variable styling
+// Actual styling is handled via useEffect and CSS
+const VariableStyle = Extension.create({
+  name: 'variableStyle',
 })
 
 // Font size extension
@@ -91,7 +104,11 @@ export default function CadenceStepEmailModal({
   currentDayNumber = 0,
   currentStepOrder = null,
 }) {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceStepEmailModal.jsx:93',message:'Component initialization',data:{open,hasStepData:!!stepData,hasEmailSettings:!!emailSettings},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const subjectRef = useRef(null)
+  const editorContainerRef = useRef(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [thread, setThread] = useState("none")
   const [localEmailSettings, setLocalEmailSettings] = useState(emailSettings)
@@ -164,7 +181,11 @@ export default function CadenceStepEmailModal({
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ blockquote: true }),
+      StarterKit.configure({ 
+        blockquote: true,
+        link: false, // Disable link from StarterKit since we add it separately
+        underline: false, // Disable underline from StarterKit since we add it separately
+      }),
       Underline,
       TextStyle,
       Color.configure({ types: ["textStyle"] }),
@@ -177,6 +198,7 @@ export default function CadenceStepEmailModal({
         },
       }),
       Autolink,
+      VariableStyle,
     ],
     content: "",
     editorProps: {
@@ -217,6 +239,14 @@ export default function CadenceStepEmailModal({
       },
     },
   })
+
+  // #region agent log
+  useEffect(() => {
+    if (editor) {
+      fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceStepEmailModal.jsx:225',message:'Editor created successfully',data:{hasEditor:!!editor,isDestroyed:editor?.isDestroyed},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    }
+  }, [editor]);
+  // #endregion
 
   const isEditorEmpty = () => {
     if (!editor) return true
@@ -264,6 +294,84 @@ export default function CadenceStepEmailModal({
       }, 200);
     }
   }, [open, editor])
+
+  // 🎨 Style variables in the editor by wrapping them in spans
+  // Note: This uses DOM manipulation which is safe as it only wraps text nodes
+  useEffect(() => {
+    if (!editor || !open) return
+
+    let timeoutId = null
+
+    const styleVariables = () => {
+      // Clear any pending timeouts
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+
+      timeoutId = setTimeout(() => {
+        const editorElement = editorContainerRef.current?.querySelector('.ProseMirror')
+        if (!editorElement) return
+
+        const variableRegex = /\{\{(\w+)\}\}/g
+        
+        // Use a more careful approach: only style if editor is not in a transaction
+        if (editor.isDestroyed) return
+
+        const walker = document.createTreeWalker(
+          editorElement,
+          NodeFilter.SHOW_TEXT,
+          null
+        )
+
+        let textNode
+        const nodesToProcess = []
+
+        while ((textNode = walker.nextNode())) {
+          const text = textNode.textContent || ''
+          if (variableRegex.test(text)) {
+            const parent = textNode.parentElement
+            // Skip if already wrapped or if parent is a variable span
+            if (!parent?.classList.contains('tiptap-variable')) {
+              nodesToProcess.push({ textNode, text, parent })
+            }
+          }
+        }
+
+        // Process nodes in reverse to avoid index issues
+        nodesToProcess.reverse().forEach(({ textNode, text, parent }) => {
+          const newHTML = text.replace(/\{\{(\w+)\}\}/g, '<span class="tiptap-variable">$&</span>')
+          if (newHTML !== text && parent && textNode.parentNode === parent) {
+            const temp = document.createElement('div')
+            temp.innerHTML = newHTML
+            const fragment = document.createDocumentFragment()
+            while (temp.firstChild) {
+              fragment.appendChild(temp.firstChild)
+            }
+            try {
+              parent.replaceChild(fragment, textNode)
+            } catch (e) {
+              // Ignore errors if node was already replaced
+              console.debug('Variable styling: node already replaced', e)
+            }
+          }
+        })
+      }, 50)
+    }
+
+    // Style variables after editor updates
+    editor.on('update', styleVariables)
+
+    // Initial styling after a delay to ensure editor is ready
+    setTimeout(styleVariables, 200)
+
+    return () => {
+      // Cleanup: remove event listener and clear any pending timeouts
+      if (editor && !editor.isDestroyed) {
+        editor.off('update', styleVariables)
+      }
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [editor, open])
 
   // Prefill subject + body when modal opens (for editing) or start empty (for creation)
   useEffect(() => {
@@ -370,6 +478,19 @@ export default function CadenceStepEmailModal({
 
   return (
     <>
+      <style>{`
+        /* Style variables in the TipTap editor */
+        .tiptap-variable {
+          background-color: #dbeafe !important;
+          color: #1e40af !important;
+          padding: 2px 4px !important;
+          border-radius: 3px !important;
+          font-family: 'Courier New', monospace !important;
+          font-size: 0.9em !important;
+          font-weight: 500 !important;
+          display: inline-block !important;
+        }
+      `}</style>
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent 
           className="max-w-3xl"
@@ -538,11 +659,63 @@ export default function CadenceStepEmailModal({
                     />
                   </div>
                 </div>
+
+                {/* Variables Dropdown */}
+                <div className="ml-2 border-l border-gray-300 pl-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            type="button"
+                          >
+                            <Code size={16} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              editor?.chain().focus().insertContent('{{firstname}}').run()
+                            }}
+                          >
+                            First Name
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              editor?.chain().focus().insertContent('{{lastname}}').run()
+                            }}
+                          >
+                            Last Name
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              editor?.chain().focus().insertContent('{{title}}').run()
+                            }}
+                          >
+                            Title
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              editor?.chain().focus().insertContent('{{company}}').run()
+                            }}
+                          >
+                            Company
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Insert variable</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
             </TooltipProvider>
 
             {/* Editor */}
-            <div className="border rounded-md bg-white h-[250px] overflow-y-auto p-2">
+            <div ref={editorContainerRef} className="border rounded-md bg-white h-[250px] overflow-y-auto p-2">
               <EditorContent
                 editor={editor}
                 className="prose max-w-none focus:outline-none h-full"

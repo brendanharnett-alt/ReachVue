@@ -224,6 +224,13 @@ function ensureActionIds(structure) {
 }
 
 export default function CadenceDetailPage() {
+  // #region agent log
+  try {
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:226',message:'Component initialization start',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  } catch (e) {
+    fetch('http://127.0.0.1:7242/ingest/57901036-88fd-428d-8626-d7a2f9d2930c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CadenceDetailPage.jsx:226',message:'Component initialization error',data:{error:e?.message,stack:e?.stack},timestamp:Date.now(),runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  }
+  // #endregion
   const { cadenceId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
