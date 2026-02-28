@@ -26,7 +26,7 @@ export default function Sidebar() {
         <div className="flex items-center pt-4 pb-2 mb-2 w-full">
           {/* Fixed-width icon area - always w-20 to match collapsed sidebar */}
           <div className="w-20 h-8 flex items-center justify-center flex-shrink-0">
-            <img src={icon} alt="ReachVue" className="h-[18px] w-[18px]" />
+            <img src={icon} alt="ReachVue" className="h-9 w-9" />
           </div>
           {/* Text - shown when expanded */}
           <span className="text-xl font-semibold hidden group-hover:inline pr-3 self-center">ReachVue</span>
