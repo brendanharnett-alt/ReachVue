@@ -17,17 +17,19 @@ export default function Sidebar() {
   return (
     <div className="group fixed left-0 top-0 h-screen z-40">
       <div
-        className="h-full text-white flex flex-col items-center p-4
+        className="h-full text-white flex flex-col
                    shadow-lg border-r
-                   w-20 group-hover:w-60 transition-all duration-300 ease-in-out overflow-hidden"
+                   w-20 group-hover:w-52 transition-all duration-300 ease-in-out overflow-hidden"
         style={{ backgroundColor: '#3B5FC7', borderColor: '#2d4aa8', boxShadow: '0 10px 15px -3px rgba(59, 95, 199, 0.3), 0 4px 6px -2px rgba(59, 95, 199, 0.2)' }}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-3 py-2 mb-2 w-full">
-          {/* Icon - always visible */}
-          <img src={icon} alt="ReachVue" className="h-8 w-8 flex-shrink-0" />
+        <div className="flex items-center pt-4 pb-2 mb-2 w-full">
+          {/* Fixed-width icon area - always w-20 to match collapsed sidebar */}
+          <div className="w-20 h-8 flex items-center justify-center flex-shrink-0">
+            <img src={icon} alt="ReachVue" className="h-[18px] w-[18px]" />
+          </div>
           {/* Text - shown when expanded */}
-          <span className="text-xl font-semibold hidden group-hover:inline">ReachVue</span>
+          <span className="text-xl font-semibold hidden group-hover:inline pr-3 self-center">ReachVue</span>
         </div>
 
         {/* Navigation */}
@@ -42,12 +44,16 @@ export default function Sidebar() {
               <Link
                 key={item.label}
                 to={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${
+                className={`flex items-center py-2 rounded-lg text-sm transition ${
                   isActive ? "bg-white/20" : "hover:bg-white/10"
                 }`}
               >
-                {item.icon}
-                <span className="hidden group-hover:inline">{item.label}</span>
+                {/* Fixed-width icon area - always w-20 to match collapsed sidebar */}
+                <div className="w-20 h-6 flex items-center justify-center flex-shrink-0">
+                  {item.icon}
+                </div>
+                {/* Text - shown when expanded */}
+                <span className="hidden group-hover:inline pr-3 self-center">{item.label}</span>
               </Link>
             );
           })}
