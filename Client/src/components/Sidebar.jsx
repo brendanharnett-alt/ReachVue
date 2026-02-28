@@ -52,8 +52,8 @@ export default function Sidebar() {
                 <div className="w-20 h-6 flex items-center justify-center flex-shrink-0">
                   {item.icon}
                 </div>
-                {/* Text - shown when expanded */}
-                <span className="hidden group-hover:inline pr-3 self-center">{item.label}</span>
+                {/* Text - shown when expanded, positioned closer with negative margin */}
+                <span className="hidden group-hover:inline pr-3 self-center -ml-5">{item.label}</span>
               </Link>
             );
           })}
