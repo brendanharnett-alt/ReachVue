@@ -80,6 +80,31 @@ const FontSize = Extension.create({
   },
 })
 
+// 🔹 Font family extension
+const FontFamily = Extension.create({
+  name: "fontFamily",
+  addOptions() {
+    return { types: ["textStyle"] }
+  },
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          fontFamily: {
+            default: null,
+            parseHTML: (el) => el.style.fontFamily || null,
+            renderHTML: (attrs) => {
+              if (!attrs.fontFamily) return {}
+              return { style: `font-family: ${attrs.fontFamily}` }
+            },
+          },
+        },
+      },
+    ]
+  },
+})
+
 // 🔹 Variable styling extension - placeholder for variable styling
 // Actual styling is handled via useEffect and CSS
 const VariableStyle = Extension.create({
@@ -146,6 +171,7 @@ export default function EmailModal({
       TextStyle,
       Color.configure({ types: ["textStyle"] }),
       FontSize,
+      FontFamily,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Link.configure({
         openOnClick: false,
@@ -613,6 +639,16 @@ export default function EmailModal({
     "#FFD700",
   ]
   const fontSizes = ["12px", "14px", "18px", "24px"]
+  const fontFamilies = [
+    "Calibri",
+    "Arial",
+    "Times New Roman",
+    "Georgia",
+    "Verdana",
+    "Helvetica",
+    "Courier New",
+    "Tahoma"
+  ]
 
   return (
     <>
@@ -843,24 +879,85 @@ export default function EmailModal({
                 </Tooltip>
               </div>
 
-              {/* Font size */}
+              {/* Font size - dropdown with custom input */}
+              <div className="ml-2 flex items-center gap-1">
+                <select
+                  className="text-sm border rounded p-1 bg-white"
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value === "custom") {
+                      // Focus the custom input
+                      const customInput = document.getElementById('custom-font-size-email')
+                      customInput?.focus()
+                    } else if (value) {
+                      editor
+                        .chain()
+                        .focus()
+                        .setMark("textStyle", { fontSize: value })
+                        .run()
+                    }
+                  }}
+                  defaultValue=""
+                >
+                  <option value="" disabled>
+                    Font size
+                  </option>
+                  {fontSizes.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                  <option value="custom">Custom...</option>
+                </select>
+                
+                {/* Custom font size input */}
+                <input
+                  id="custom-font-size-email"
+                  type="text"
+                  placeholder="e.g. 16px"
+                  className="text-sm border rounded p-1 bg-white w-20"
+                  onBlur={(e) => {
+                    const value = e.target.value.trim()
+                    if (value) {
+                      // Ensure it has 'px' suffix if it's just a number
+                      const fontSize = value.match(/\d+/) 
+                        ? (value.includes('px') || value.includes('em') || value.includes('rem') || value.includes('%') 
+                            ? value 
+                            : `${value}px`)
+                        : value
+                      editor
+                        .chain()
+                        .focus()
+                        .setMark("textStyle", { fontSize })
+                        .run()
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.target.blur()
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Font family */}
               <select
                 className="ml-2 text-sm border rounded p-1 bg-white"
                 onChange={(e) =>
                   editor
                     .chain()
                     .focus()
-                    .setMark("textStyle", { fontSize: e.target.value })
+                    .setMark("textStyle", { fontFamily: e.target.value })
                     .run()
                 }
                 defaultValue=""
               >
                 <option value="" disabled>
-                  Font size
+                  Font family
                 </option>
-                {fontSizes.map((size) => (
-                  <option key={size} value={size}>
-                    {size}
+                {fontFamilies.map((font) => (
+                  <option key={font} value={font}>
+                    {font}
                   </option>
                 ))}
               </select>

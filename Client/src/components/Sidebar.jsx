@@ -15,10 +15,10 @@ export default function Sidebar() {
   const location = useLocation(); // lets us highlight the active link
 
   return (
-    <div className="group fixed left-0 top-0 h-screen z-40">
+    <div className="group fixed left-0 top-0 h-screen z-50">
       <div
         className="h-full text-white flex flex-col
-                   shadow-[4px_0_16px_rgba(0,0,0,0.12)] border-r border-white/10
+                   shadow-[4px_0_16px_rgba(0,0,0,0.12)] border-r border-black/10
                    w-20 group-hover:w-60 transition-all duration-300 ease-in-out overflow-hidden"
         style={{ backgroundColor: '#3a5b91' }}
       >
